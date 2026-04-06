@@ -7,6 +7,8 @@ import numpy as np
 from typing import Tuple, Dict
 from scipy.stats import entropy
 
+from core_modules import gaussian_mixture_noise_detection
+
 
 class PseudoLabelGenerator:
     """自适应伪标签生成器"""
@@ -44,6 +46,7 @@ class PseudoLabelGenerator:
         heatmap_diff = torch.abs(c_heatmap - c_knn)  # [B, num_concepts]
         mean_diff = heatmap_diff.mean(dim=1)  # [B]
         
+        # 与 core_modules.gaussian_mixture_noise_detection 一致：1=保留，0=滤除
         m_noise = self._gmm_noise_detection(mean_diff)  # [B]
         
         # 步骤2: 动态混合
@@ -64,22 +67,8 @@ class PseudoLabelGenerator:
         return c_pseudo, m_rel
     
     def _gmm_noise_detection(self, differences: torch.Tensor) -> torch.Tensor:
-        """GMM噪声检测"""
-        from sklearn.mixture import GaussianMixture
-        
-        diff_np = differences.detach().cpu().numpy().reshape(-1, 1)
-        
-        gmm = GaussianMixture(n_components=2, random_state=42)
-        gmm.fit(diff_np)
-        
-        # 获取样本的对数似然
-        ll = gmm.score_samples(diff_np)
-        
-        # 高似然 = 噪声少，返回1；低似然 = 噪声多，返回0
-        threshold = np.percentile(ll, 30)
-        noise_mask = (ll >= threshold).astype(np.float32)
-        
-        return torch.FloatTensor(noise_mask).to(differences.device)
+        """GMM 噪声过滤掩码（与 ``core_modules.gaussian_mixture_noise_detection`` 共享逻辑）。"""
+        return gaussian_mixture_noise_detection(differences, n_components=2)
     
     def _verify_consistency(self, current_labels: torch.Tensor,
                            history) -> torch.Tensor:
@@ -159,8 +148,14 @@ class UncertaintyGuidedSampler:
         # 归一化权重
         weights = weights / (weights.sum() + 1e-8)
         
-        # 采样
-        probs = weights.detach().cpu().numpy()
+        # 采样（float32→numpy 后概率和可能略偏离 1，np.random.choice 会报错）
+        probs = np.asarray(weights.detach().cpu().numpy(), dtype=np.float64)
+        probs = np.clip(probs, 0.0, None)
+        s = float(probs.sum())
+        if not np.isfinite(s) or s <= 0:
+            probs = np.full(N, 1.0 / N, dtype=np.float64)
+        else:
+            probs /= s
         sampled_indices = np.random.choice(
             N, size=batch_size, p=probs, replace=True
         )

@@ -210,4 +210,10 @@ marimo/_lsp/
 __marimo__/
 
 Data/
->>>>>>> 975974c9382437fbaabd61e85461e085e7c59a61
+
+# SCAR-CBM：各阶段产出与大数据（勿提交至 GitHub）
+SCAR-CBM/**/stage*_output/**/*.npz
+SCAR-CBM/**/stage*_output/**/*.pt
+SCAR-CBM/**/stage*_output/**/*.pth
+SCAR-CBM/**/stage1_*_output/**/*.pt
+SCAR-CBM/**/stage1_*_output/**/*.npy

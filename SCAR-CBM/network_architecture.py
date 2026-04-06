@@ -34,11 +34,13 @@ class BaseEncoder(nn.Module):
     def _make_layer(self, in_channels, out_channels, blocks, stride=1):
         layers = []
         # 第一个block可能需要改变维度
+        first_conv_in = in_channels
         if stride != 1 or in_channels != out_channels:
             layers.append(nn.Conv2d(in_channels, out_channels, 1, stride=stride))
             layers.append(nn.BatchNorm2d(out_channels))
+            first_conv_in = out_channels
         
-        layers.append(nn.Conv2d(in_channels, out_channels, 3, stride=stride, padding=1))
+        layers.append(nn.Conv2d(first_conv_in, out_channels, 3, stride=1, padding=1))
         layers.append(nn.BatchNorm2d(out_channels))
         layers.append(nn.ReLU(inplace=True))
         
@@ -55,6 +57,12 @@ class BaseEncoder(nn.Module):
         - features: 全局特征 [B, feature_dim]
         - spatial_features: 空间特征用于注意力 [B, C, H, W]
         """
+        if x.ndim != 4:
+            raise ValueError(f"BaseEncoder 期望输入形状 [B,C,H,W]，得到 ndim={x.ndim}")
+        if x.shape[1] != self.input_dim:
+            raise ValueError(
+                f"BaseEncoder 期望通道数 {self.input_dim}，得到 {x.shape[1]}"
+            )
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -75,16 +83,17 @@ class BaseEncoder(nn.Module):
 class CrossAttentionModule(nn.Module):
     """跨注意力区域聚焦模块"""
     
-    def __init__(self, feature_dim: int = 256, num_heads: int = 4):
+    def __init__(self, feature_dim: int = 256, num_heads: int = 4, query_dim: int = None):
         super().__init__()
         self.feature_dim = feature_dim
         self.num_heads = num_heads
         self.head_dim = feature_dim // num_heads
+        self.query_dim = query_dim if query_dim is not None else feature_dim
         
         assert feature_dim % num_heads == 0
         
         # 投影层
-        self.query_proj = nn.Linear(feature_dim, feature_dim)
+        self.query_proj = nn.Linear(self.query_dim, feature_dim)
         self.key_proj = nn.Linear(feature_dim, feature_dim)
         self.value_proj = nn.Linear(feature_dim, feature_dim)
         self.out_proj = nn.Linear(feature_dim, feature_dim)
@@ -215,19 +224,34 @@ class GraphConvolutionalNetwork(nn.Module):
                 adj_matrix: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x: 节点特征 [num_concepts, feature_dim]
-            adj_matrix: 邻接矩阵 [num_concepts, num_concepts]
+            x: 节点特征，支持：
+                - [num_concepts, feature_dim]：标准 GCN，聚合为 A @ X
+                - [B, num_concepts]：按样本在概念维上传播，每行为 x @ A^T
+                - [B, num_concepts, feature_dim]：批内 A @ X_b
+            adj_matrix: 邻接矩阵 [num_concepts, num_concepts]（行/列为概念索引）
         
         Returns:
-            updated_features: 更新后的节点特征 [num_concepts, output_dim]
+            与 layer 输出维度一致的张量（最后一层为 output_dim）
         """
+        adj_dim = adj_matrix.shape[0]
         for i, layer in enumerate(self.layers):
+            if x.ndim == 2 and x.shape[0] == adj_dim:
+                # [num_concepts, F] -> A @ X
+                x = torch.matmul(adj_matrix, x)
+            elif x.ndim == 3 and x.shape[1] == adj_dim:
+                # [B, C, F] -> 对每个 batch 做 A @ X
+                x = torch.einsum('ij,bjf->bif', adj_matrix, x)
+            elif x.ndim == 2 and x.shape[-1] == adj_dim:
+                # [B, C]：概念维在最后一维，等价于 (A @ x^T)^T = x @ A^T
+                x = torch.matmul(x, adj_matrix.t())
+            elif x.shape[-1] == adj_dim:
+                raise ValueError(
+                    f"GCN 不支持的输入形状 {tuple(x.shape)}（邻接维为 {adj_dim}）"
+                )
+
             x = layer(x)
             if i < len(self.layers) - 1:
                 x = F.relu(x)
-            
-            # 图卷积：h_{i+1} = σ(Ã h_i W)
-            x = torch.matmul(adj_matrix, x)
         
         return x
 
@@ -272,7 +296,11 @@ class CompleteModel(nn.Module):
         super().__init__()
         
         self.encoder = BaseEncoder(input_dim, feature_dim)
-        self.cross_attention = CrossAttentionModule(feature_dim, num_heads)
+        self.cross_attention = CrossAttentionModule(
+            feature_dim=feature_dim,
+            num_heads=num_heads,
+            query_dim=num_concepts,
+        )
         self.predictor_global = GlobalConceptPredictor(feature_dim, num_concepts)
         self.predictor_local = LocalConceptPredictor(feature_dim, num_concepts)
         self.heatmap_generator = ConceptHeatmapGenerator(num_concepts)

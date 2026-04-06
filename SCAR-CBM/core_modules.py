@@ -217,17 +217,19 @@ def knn_retrieval(query_features: torch.Tensor,
 
 def gaussian_mixture_noise_detection(values: torch.Tensor, 
                                      n_components: int = 2) -> torch.Tensor:
-    """GMM噪声检测"""
-    values_np = values.detach().cpu().numpy()
-    
+    """
+    基于 GMM 对数似然的样本筛选。
+
+    返回与 ``values`` 逐元素对齐的掩码：高似然（被 GMM 较好解释）为 1，
+    低似然（离群/噪声倾向）为 0。与 ``PseudoLabelGenerator`` 中用法一致（1 表示保留）。
+    """
+    values_np = values.detach().cpu().numpy().reshape(-1, 1)
+
     gmm = GaussianMixture(n_components=n_components, random_state=42)
     gmm.fit(values_np)
-    
-    # 获取每个样本的负对数似然
-    nll = -gmm.score_samples(values_np)
-    
-    # 简单阈值：选择似然较高的样本（低nll）
-    threshold = np.percentile(nll, 70)
-    noise_mask = (nll < threshold).astype(np.float32)
-    
-    return torch.FloatTensor(noise_mask).to(values.device)
+
+    ll = gmm.score_samples(values_np)
+    threshold = np.percentile(ll, 30)
+    keep_mask = (ll >= threshold).astype(np.float32)
+
+    return torch.from_numpy(keep_mask).to(device=values.device, dtype=torch.float32)

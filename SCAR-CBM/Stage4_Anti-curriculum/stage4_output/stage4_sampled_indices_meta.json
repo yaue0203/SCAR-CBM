@@ -1,0 +1,10 @@
+{
+  "unlabeled_npz": "/root/autodl-tmp/SCAR-CBM/Stage2_Semantic-feature-extraction/stage2_output/stage2_features.npz",
+  "num_samples": 5994,
+  "batch_size": 256,
+  "num_repeats": 1,
+  "low_density_ratio": 0.2,
+  "uncertainty_weight": 1.0,
+  "seed": null,
+  "device": "cuda"
+}
