@@ -21,6 +21,7 @@ from pseudo_label_and_sampling import (
     CurriculumLearningScheduler
 )
 from loss_functions import MultiTaskLoss
+from stage1_hypergraph import build_concept_hypergraph as build_hypergraph_stage1
 
 
 class ConceptualSSLFramework:
@@ -92,26 +93,23 @@ class ConceptualSSLFramework:
     
     # ==================== Stage 1: 概念关系图构建 ====================
     
-    def build_concept_hypergraph(self,
-                                 labeled_concept_ids: np.ndarray):
+    def build_concept_hypergraph(
+        self,
+        labeled_concept_ids: np.ndarray,
+        cooccurrence_threshold: float = 0.1,
+    ):
         """
-        Stage 1: 离线构建概念关系超图
-        
+        Stage 1: 离线构建概念关系超图（与 stage1_hypergraph.build_concept_hypergraph 一致）
+
         Args:
             labeled_concept_ids: 有标签数据的概念ID [N_labeled, num_concepts]
+            cooccurrence_threshold: 共现归一化权重阈值
         """
-        self.logger.info("Building concept hypergraph...")
-        
-        self.hypergraph = ConceptHypergraph(self.num_concepts)
-        self.hypergraph.build_from_labeled_data(
-            labels=None,
-            concept_ids=torch.FloatTensor(labeled_concept_ids),
-            cooccurrence_threshold=0.1
-        )
-        
-        self.logger.info(
-            f"Hypergraph built with {self.hypergraph.hypergraph.number_of_nodes()} "
-            f"nodes and {self.hypergraph.hypergraph.number_of_edges()} edges"
+        self.logger.info("Building concept hypergraph (Stage 1)...")
+        self.hypergraph = build_hypergraph_stage1(
+            labeled_concept_ids,
+            num_concepts=self.num_concepts,
+            cooccurrence_threshold=cooccurrence_threshold,
         )
     
     # ==================== Stage 2: 细粒度特征提取 ====================
@@ -353,27 +351,51 @@ class ConceptualSSLFramework:
         
         return {'val_loss': avg_loss}
     
-    def fit(self,
-           train_labeled_loader: DataLoader,
-           train_unlabeled_loader: DataLoader,
-           val_loader: DataLoader,
-           labeled_concept_ids: np.ndarray,
-           contour_mask: Optional[torch.Tensor] = None) -> Dict:
+    def fit(
+        self,
+        train_labeled_loader: DataLoader,
+        train_unlabeled_loader: DataLoader,
+        val_loader: DataLoader,
+        labeled_concept_ids: Optional[np.ndarray] = None,
+        prebuilt_hypergraph: Optional[ConceptHypergraph] = None,
+        cooccurrence_threshold: float = 0.1,
+        contour_mask: Optional[torch.Tensor] = None,
+    ) -> Dict:
         """
         完整的训练流程
-        
+
         Args:
             train_labeled_loader: 有标签训练数据
             train_unlabeled_loader: 无标签训练数据
             val_loader: 验证数据
-            labeled_concept_ids: 有标签数据的概念ID
+            labeled_concept_ids: 有标签数据的概念ID；与 prebuilt_hypergraph 二选一
+            prebuilt_hypergraph: 若已离线跑过 Stage 1，可直接传入，fit 内不再构建
+            cooccurrence_threshold: 仅在根据 labeled_concept_ids 构建 Stage 1 时生效
             contour_mask: 物理轮廓掩码
-        
+
         Returns:
             training_history: 训练历史
         """
-        # Stage 1: 构建概念超图
-        self.build_concept_hypergraph(labeled_concept_ids)
+        if prebuilt_hypergraph is not None:
+            if prebuilt_hypergraph.num_concepts != self.num_concepts:
+                raise ValueError(
+                    f"prebuilt_hypergraph.num_concepts={prebuilt_hypergraph.num_concepts} "
+                    f"与框架 num_concepts={self.num_concepts} 不一致"
+                )
+            self.hypergraph = prebuilt_hypergraph
+            self.logger.info(
+                "使用预构建的 Stage 1 超图（跳过 build_concept_hypergraph）"
+            )
+        elif labeled_concept_ids is not None:
+            self.build_concept_hypergraph(
+                labeled_concept_ids,
+                cooccurrence_threshold=cooccurrence_threshold,
+            )
+        else:
+            raise ValueError(
+                "fit() 需要 labeled_concept_ids 或 prebuilt_hypergraph 之一"
+            )
+
         adj_matrix = self.hypergraph.get_adjacency_matrix(self.device)
         
         # 初始化伪标签历史

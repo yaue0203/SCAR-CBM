@@ -60,7 +60,7 @@ history = framework.fit(
 
 ### 5个主要阶段
 
-#### Stage 1: 概念关系图构建 (离线)
+#### /autodl-pub/data/CUB200-2011 (离线)
 - 从有标签数据提取概念共现模式
 - 构建概念超图
 - 生成邻接矩阵用于GCN推理

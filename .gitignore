@@ -208,4 +208,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+Data/
 >>>>>>> 975974c9382437fbaabd61e85461e085e7c59a61
