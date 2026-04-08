@@ -33,7 +33,7 @@ from pseudo_label_and_sampling import (
     PseudoLabelGenerator, UncertaintyGuidedSampler,
     CurriculumLearningScheduler
 )
-from loss_functions import MultiTaskLoss, SpatialConceptAlignmentLoss
+from loss_functions import MultiTaskLoss, SpatialConceptAlignmentLoss, SpatialForegroundSeparationLoss
 from stage1_hypergraph import build_concept_hypergraph as build_hypergraph_stage1
 
 
@@ -172,7 +172,9 @@ class ConceptualSSLFramework:
         self.loss_fn = MultiTaskLoss()
         self.lambda_spatial_align = float(lambda_spatial_align)
         self.lambda_spatial_consistency = float(lambda_spatial_consistency)
+        self.lambda_spatial_mask = 0.2
         self.spatial_align_loss = SpatialConceptAlignmentLoss()
+        self.spatial_mask_loss = SpatialForegroundSeparationLoss()
 
         # 学习率调度器
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
@@ -420,6 +422,11 @@ class ConceptualSSLFramework:
                     loss_spa = self.spatial_align_loss(smap, y_l)
                     loss_total = loss_total + self.lambda_spatial_align * loss_spa
                     epoch_losses["L_spatial_align"] += loss_spa.item()
+                    batch_mask_l = batch_l[4].to(self.device) if len(batch_l) > 4 else None
+                    if batch_mask_l is not None and self.lambda_spatial_mask > 0.0:
+                        loss_spatial_mask = self.spatial_mask_loss(smap, batch_mask_l, y_l)
+                        loss_total = loss_total + self.lambda_spatial_mask * loss_spatial_mask
+                        epoch_losses["L_spatial_mask"] += loss_spatial_mask.item()
 
             loss_total.backward()
             self.optimizer.step()
@@ -500,6 +507,17 @@ class ConceptualSSLFramework:
             loss = losses_dict['L_total']
             if self.lambda_spatial_consistency > 0.0:
                 loss = loss + self.lambda_spatial_consistency * losses_dict['L_spatial_consistency']
+
+            if batch_contour_mask is not None and self.lambda_spatial_mask > 0.0:
+                smap_w = outputs_weak.get('spatial_concept_heatmap')
+                if smap_w is not None:
+                    loss_spatial_mask_u = self.spatial_mask_loss(smap_w, batch_contour_mask, c_pseudo.detach())
+                    loss = loss + self.lambda_spatial_mask * loss_spatial_mask_u
+                    losses_dict['L_spatial_mask'] = loss_spatial_mask_u
+                else:
+                    losses_dict['L_spatial_mask'] = c_heatmap.new_zeros(())
+            else:
+                losses_dict['L_spatial_mask'] = c_heatmap.new_zeros(())
 
             if loss > 0:
                 loss.backward()

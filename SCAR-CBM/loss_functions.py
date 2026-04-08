@@ -366,6 +366,85 @@ class SpatialConsistencyLoss(nn.Module):
         return per_sample.sum()
 
 
+class SpatialForegroundSeparationLoss(nn.Module):
+    """利用前景 mask 把响应往主体内部收，并抑制边框背景偏置。"""
+
+    def __init__(
+        self,
+        reduction: str = "mean",
+        foreground_floor: float = 0.35,
+        separation_margin: float = 0.12,
+        border_ratio: float = 0.12,
+        foreground_weight: float = 0.5,
+        border_weight: float = 0.35,
+        eps: float = 1e-6,
+    ):
+        super().__init__()
+        self.reduction = reduction
+        self.foreground_floor = float(foreground_floor)
+        self.separation_margin = float(separation_margin)
+        self.border_ratio = float(border_ratio)
+        self.foreground_weight = float(foreground_weight)
+        self.border_weight = float(border_weight)
+        self.eps = float(eps)
+
+    def _border_mask(self, h: int, w: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+        bw = max(1, int(round(min(h, w) * self.border_ratio)))
+        mask = torch.zeros((1, 1, h, w), device=device, dtype=dtype)
+        mask[:, :, :bw, :] = 1.0
+        mask[:, :, -bw:, :] = 1.0
+        mask[:, :, :, :bw] = 1.0
+        mask[:, :, :, -bw:] = 1.0
+        return mask
+
+    def forward(
+        self,
+        spatial_heatmap: torch.Tensor,
+        contour_mask: torch.Tensor,
+        concept_targets: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        if spatial_heatmap.dim() != 4:
+            raise ValueError('SpatialForegroundSeparationLoss 期望 spatial_heatmap 为 [B,C,H,W]')
+        if contour_mask.dim() != 4:
+            raise ValueError('SpatialForegroundSeparationLoss 期望 contour_mask 为 [B,1,H,W] 或 [1,1,H,W]')
+
+        b, c, h, w = spatial_heatmap.shape
+        mask = contour_mask.float()
+        if mask.shape[0] == 1 and b > 1:
+            mask = mask.expand(b, -1, -1, -1)
+        if mask.shape[-2:] != (h, w):
+            mask = F.interpolate(mask, size=(h, w), mode='nearest')
+        mask = mask.clamp(0.0, 1.0)
+        bg_mask = 1.0 - mask
+
+        if concept_targets is None:
+            concept_weights = spatial_heatmap.mean(dim=(2, 3)).detach()
+        else:
+            concept_weights = concept_targets.float()
+        concept_weights = concept_weights.clamp(0.0, 1.0)
+
+        fg_area = mask.sum(dim=(2, 3)).clamp_min(self.eps)
+        bg_area = bg_mask.sum(dim=(2, 3)).clamp_min(self.eps)
+
+        fg_mean = (spatial_heatmap * mask).sum(dim=(2, 3)) / fg_area
+        bg_mean = (spatial_heatmap * bg_mask).sum(dim=(2, 3)) / bg_area
+
+        loss_foreground = concept_weights * F.relu(self.foreground_floor - fg_mean)
+        loss_separation = concept_weights * F.relu(self.separation_margin - (fg_mean - bg_mean))
+
+        border_mask = self._border_mask(h, w, spatial_heatmap.device, spatial_heatmap.dtype)
+        border_bg = (border_mask * bg_mask).clamp(0.0, 1.0)
+        border_area = border_bg.sum(dim=(2, 3)).clamp_min(self.eps)
+        border_mean = (spatial_heatmap * border_bg).sum(dim=(2, 3)) / border_area
+        loss_border = concept_weights * border_mean
+
+        total = loss_separation + self.foreground_weight * loss_foreground + self.border_weight * loss_border
+        if self.reduction == 'sum':
+            return total.sum()
+        denom = concept_weights.sum().clamp_min(self.eps)
+        return total.sum() / denom
+
+
 class SpatialPseudoAlignmentLoss(nn.Module):
     """将空间热力图池化为概念 logits，并与伪标签对齐。"""
 
