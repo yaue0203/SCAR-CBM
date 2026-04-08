@@ -141,6 +141,75 @@ class CrossAttentionModule(nn.Module):
         return output
 
 
+class ConceptSpatialAlignment(nn.Module):
+    """
+    SSCBM 风格的概念-空间对齐头。
+
+    为每个概念维护正/负两套原型向量，并使用融合后的概念状态在两者之间插值，
+    再与归一化后的空间特征逐位置做点积，生成概念热力图。
+    这样每张图的热力图由“当前样本的概念状态”条件化，而不是固定卷积模板。
+    """
+
+    def __init__(self, num_concepts: int, feature_dim: int, num_heads: int = 4):
+        super().__init__()
+        self.num_concepts = num_concepts
+        self.feature_dim = feature_dim
+        self.temperature = nn.Parameter(torch.tensor(1.0))
+        # num_heads 保留以兼容 CompleteModel 构造参数，本模块不使用多头注意力
+        self.pos_embeddings = nn.Parameter(torch.empty(num_concepts, feature_dim))
+        self.neg_embeddings = nn.Parameter(torch.empty(num_concepts, feature_dim))
+        self.feature_proj = nn.Conv2d(feature_dim, feature_dim, kernel_size=1, bias=False)
+        self.condition_gate = nn.Linear(num_concepts * 2, num_concepts)
+        nn.init.xavier_uniform_(self.pos_embeddings)
+        nn.init.xavier_uniform_(self.neg_embeddings)
+        nn.init.kaiming_normal_(self.feature_proj.weight, nonlinearity="linear")
+        nn.init.zeros_(self.condition_gate.weight)
+        nn.init.zeros_(self.condition_gate.bias)
+
+    def forward(
+        self,
+        spatial_features: torch.Tensor,
+        c_global: torch.Tensor,
+        c_local: torch.Tensor = None,
+        c_fused: torch.Tensor = None,
+    ) -> torch.Tensor:
+        """
+        Args:
+            spatial_features: [B, C, H, W]
+            c_global: 全局概念 logits [B, num_concepts]
+            c_local: 局部概念 logits [B, num_concepts]
+            c_fused: 融合后的概念 logits [B, num_concepts]
+
+        Returns:
+            spatial_concept_heatmap: [B, num_concepts, H, W]，每个概念的空间概率图
+        """
+        b, _, h, w = spatial_features.shape
+        spatial_proj = self.feature_proj(spatial_features)
+        spatial_proj = F.normalize(spatial_proj, dim=1)
+        spatial_proj = spatial_proj.view(b, self.feature_dim, h * w).transpose(1, 2)
+
+        global_prob = torch.sigmoid(c_global)
+        concept_prob = global_prob
+        if c_local is not None:
+            local_prob = torch.sigmoid(c_local)
+            mix_gate = torch.sigmoid(self.condition_gate(torch.cat([c_global, c_local], dim=-1)))
+            concept_prob = mix_gate * local_prob + (1.0 - mix_gate) * global_prob
+        if c_fused is not None:
+            fused_prob = torch.sigmoid(c_fused)
+            concept_prob = 0.5 * concept_prob + 0.5 * fused_prob
+
+        concept_prob = concept_prob.unsqueeze(-1)
+        pos = self.pos_embeddings.unsqueeze(0).expand(b, -1, -1)
+        neg = self.neg_embeddings.unsqueeze(0).expand(b, -1, -1)
+        concept_embeddings = concept_prob * pos + (1.0 - concept_prob) * neg
+        concept_embeddings = F.normalize(concept_embeddings, dim=-1)
+
+        scores = torch.einsum('bnd,bkd->bnk', spatial_proj, concept_embeddings)
+        scores = scores.transpose(1, 2).view(b, self.num_concepts, h, w)
+        scores = scores * self.temperature.clamp(min=0.1, max=10.0)
+        return torch.sigmoid(scores)
+
+
 class GlobalConceptPredictor(nn.Module):
     """全局概念预测器"""
     
@@ -273,19 +342,18 @@ class ConceptHeatmapGenerator(nn.Module):
             c_local: 局部概念预测 [B, num_concepts]
         
         Returns:
-            c_heatmap: 最终概念热力图 [B, num_concepts]
+            c_heatmap: 概念热力图 **logits** [B, num_concepts]（与 BCEWithLogits、sigmoid 后概率一致）
         """
         # 获取融合权重
         g = self.fusion_gate(c_global, c_local)
         
-        # 应用sigmoid确保在0-1之间
+        # 融合为概率后转为 logit，供 BCEWithLogits / 指标中 expit 使用（与下游一致）
         c_global_prob = torch.sigmoid(c_global)
         c_local_prob = torch.sigmoid(c_local)
-        
-        # 加权融合
-        c_heatmap = g * c_local_prob + (1 - g) * c_global_prob
-        
-        return c_heatmap
+        c_prob = g * c_local_prob + (1 - g) * c_global_prob
+        eps = 1e-6
+        c_prob = c_prob.clamp(eps, 1.0 - eps)
+        return torch.logit(c_prob)
 
 
 class CompleteModel(nn.Module):
@@ -304,6 +372,9 @@ class CompleteModel(nn.Module):
         self.predictor_global = GlobalConceptPredictor(feature_dim, num_concepts)
         self.predictor_local = LocalConceptPredictor(feature_dim, num_concepts)
         self.heatmap_generator = ConceptHeatmapGenerator(num_concepts)
+        self.concept_spatial_align = ConceptSpatialAlignment(
+            num_concepts, feature_dim, num_heads=num_heads
+        )
         self.gcn = GraphConvolutionalNetwork(num_concepts, 64, num_concepts, 2)
     
     def forward(self, x: torch.Tensor,
@@ -332,6 +403,11 @@ class CompleteModel(nn.Module):
         
         # 概念热力图
         c_heatmap = self.heatmap_generator(c_global, c_local)
+
+        # 每概念图像空间热力图（与概念语义对齐，供可视化与 L_spatial 监督）
+        spatial_concept_heatmap = self.concept_spatial_align(
+            spatial_features, c_global, c_local=c_local, c_fused=c_heatmap
+        )
         
         # GCN推理（如果提供邻接矩阵）
         c_graph = None
@@ -345,5 +421,6 @@ class CompleteModel(nn.Module):
             'h_aligned': h_aligned,
             'c_local': c_local,
             'c_heatmap': c_heatmap,
+            'spatial_concept_heatmap': spatial_concept_heatmap,
             'c_graph': c_graph
         }

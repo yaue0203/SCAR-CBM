@@ -20,12 +20,17 @@ class PseudoLabelGenerator:
         self.alpha = alpha
         self.entropy_threshold_schedule = entropy_threshold_schedule or {}
         self.epoch = 0
+        self.consistency_threshold = 0.5
+        self.reliable_keep_ratio = 0.7
+        self.entropy_ema_momentum = 0.9
+        self.entropy_running_threshold = None
     
     def generate(self, 
                  c_heatmap: torch.Tensor,
                  c_knn: torch.Tensor,
                  contour_mask: torch.Tensor = None,
-                 pseudo_label_history = None) -> Tuple[torch.Tensor, torch.Tensor]:
+                 pseudo_label_history = None,
+                 sample_ids = None) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Stage 3: 自适应伪标签生成
         
@@ -37,69 +42,116 @@ class PseudoLabelGenerator:
         
         Returns:
             c_pseudo: 最终伪标签 [B, num_concepts]
-            m_rel: 可靠性掩码 [B]
+            m_rel: 有效可靠性掩码 [B]，同时满足“非噪声 + 低熵”
         """
-        batch_size = c_heatmap.shape[0]
         device = c_heatmap.device
+
+        # 与 KNN 标签（概率）在同一空间混合：heatmap 可能是 logits（Stage5）或已保存的概率（Stage2 npz）
+        def _to_prob(h: torch.Tensor) -> torch.Tensor:
+            if float(h.min()) < -1e-3 or float(h.max()) > 1.0 + 1e-3:
+                return torch.sigmoid(h)
+            return h.clamp(1e-6, 1.0 - 1e-6)
+
+        c_prob = _to_prob(c_heatmap)
         
         # 步骤1: GMM噪声检测
-        heatmap_diff = torch.abs(c_heatmap - c_knn)  # [B, num_concepts]
+        heatmap_diff = torch.abs(c_prob - c_knn)  # [B, num_concepts]
         mean_diff = heatmap_diff.mean(dim=1)  # [B]
         
         # 与 core_modules.gaussian_mixture_noise_detection 一致：1=保留，0=滤除
         m_noise = self._gmm_noise_detection(mean_diff)  # [B]
         
-        # 步骤2: 动态混合
-        c_mixed = self.alpha * c_heatmap + (1 - self.alpha) * c_knn  # [B, num_concepts]
+        # 步骤2: 动态混合（概率空间）
+        c_mixed = self.alpha * c_prob + (1 - self.alpha) * c_knn  # [B, num_concepts]
         
         # 步骤3: 历史验证
-        if pseudo_label_history is not None:
-            c_accepted = self._verify_consistency(c_mixed, pseudo_label_history)
+        if pseudo_label_history is not None and sample_ids is not None:
+            c_accepted = self._verify_consistency(
+                c_mixed, pseudo_label_history, sample_ids
+            )
         else:
             c_accepted = c_mixed
         
         # 步骤4: 动态可靠性掩码（基于熵）
-        m_rel = self._compute_reliability_mask(c_accepted, device)  # [B]
-        
-        # 步骤5: 噪声过滤
-        c_pseudo = m_noise.unsqueeze(1) * c_accepted  # [B, num_concepts]
-        
-        return c_pseudo, m_rel
+        m_rel_entropy = self._compute_reliability_mask(c_accepted, device)  # [B]
+
+        # 步骤5: 仅允许“非噪声 + 可靠”样本进入伪标签对齐损失
+        m_rel = m_noise * m_rel_entropy
+
+        return c_accepted, m_rel
     
     def _gmm_noise_detection(self, differences: torch.Tensor) -> torch.Tensor:
         """GMM 噪声过滤掩码（与 ``core_modules.gaussian_mixture_noise_detection`` 共享逻辑）。"""
         return gaussian_mixture_noise_detection(differences, n_components=2)
     
     def _verify_consistency(self, current_labels: torch.Tensor,
-                           history) -> torch.Tensor:
+                           history,
+                           sample_ids) -> torch.Tensor:
         """与历史伪标签验证一致性"""
-        # 这里简化实现，实际应该根据具体的history结构调整
-        return current_labels
+        consistency = history.get_consistency(sample_ids, current_labels)
+        if float((consistency < self.consistency_threshold).sum()) == 0.0:
+            return current_labels
+
+        history_mean = history.get_history_mean(
+            sample_ids,
+            device=current_labels.device,
+            dtype=current_labels.dtype,
+        )
+        has_history = (history_mean.abs().sum(dim=1) > 0).to(current_labels.dtype)
+        accept_mask = (consistency >= self.consistency_threshold).to(current_labels.dtype)
+        fallback_mask = (1.0 - accept_mask) * has_history
+
+        blended = 0.5 * current_labels + 0.5 * history_mean
+        return (
+            accept_mask.unsqueeze(1) * current_labels
+            + fallback_mask.unsqueeze(1) * blended
+            + (1.0 - accept_mask - fallback_mask).unsqueeze(1) * current_labels
+        )
     
     def _compute_reliability_mask(self, 
                                  labels: torch.Tensor,
                                  device: torch.device) -> torch.Tensor:
         """
-        计算可靠性掩码（基于信息熵）
-        
-        H(c) <= τ_batch 时，mask = 1（可靠）
-        H(c) > τ_batch 时，mask = 0（不可靠）
+        计算可靠性掩码（基于信息熵）。
+
+        相比“batch 中位数一刀切”的旧实现，这里采用：
+        1. batch 分位数阈值，保留更多低熵样本
+        2. EMA 平滑阈值，减少 batch 抖动
+        3. 至少保留一个样本，避免整批被清空
         """
-        # 转换为概率分布
-        probs = torch.sigmoid(labels)
+        # 混合伪标签已在 [0,1]；若为 logits 则先转概率
+        if float(labels.min()) < -1e-3 or float(labels.max()) > 1.0 + 1e-3:
+            probs = torch.sigmoid(labels)
+        else:
+            probs = labels.clamp(1e-6, 1.0 - 1e-6)
         
-        # 计算熵
         entropy_vals = -torch.sum(
             probs * torch.log(probs + 1e-8) + 
             (1 - probs) * torch.log(1 - probs + 1e-8),
             dim=1
         )  # [B]
-        
-        # 动态阈值：使用batch内的中位数
-        tau_batch = torch.median(entropy_vals)
-        
-        # 可靠性掩码
-        m_rel = (entropy_vals <= tau_batch).float()
+
+        keep_ratio = float(self.entropy_threshold_schedule.get(
+            self.epoch, self.reliable_keep_ratio
+        ))
+        keep_ratio = min(max(keep_ratio, 0.1), 0.95)
+        tau_batch = torch.quantile(entropy_vals, keep_ratio)
+
+        if self.entropy_running_threshold is None:
+            tau = tau_batch
+        else:
+            running = torch.as_tensor(
+                self.entropy_running_threshold,
+                device=entropy_vals.device,
+                dtype=entropy_vals.dtype,
+            )
+            tau = self.entropy_ema_momentum * running + (1.0 - self.entropy_ema_momentum) * tau_batch
+        self.entropy_running_threshold = float(tau.detach().cpu())
+
+        m_rel = (entropy_vals <= tau).float()
+        if float(m_rel.sum()) == 0.0:
+            keep_idx = torch.argmin(entropy_vals)
+            m_rel[keep_idx] = 1.0
         
         return m_rel
 
@@ -109,14 +161,17 @@ class UncertaintyGuidedSampler:
     
     def __init__(self, 
                  low_density_ratio: float = 0.2,
-                 uncertainty_weight: float = 1.0):
+                 uncertainty_weight: float = 1.0,
+                 uniform_mix: float = 0.35):
         """
         Args:
             low_density_ratio: 低密度样本的比例 (τ_low)
             uncertainty_weight: 不确定性权重系数
+            uniform_mix: 与均匀分布混合的比例，避免采样塌缩
         """
         self.low_density_ratio = low_density_ratio
         self.uncertainty_weight = uncertainty_weight
+        self.uniform_mix = uniform_mix
     
     def sample(self, 
                features: torch.Tensor,
@@ -134,20 +189,8 @@ class UncertaintyGuidedSampler:
             sampled_indices: 采样的样本索引
         """
         N = features.shape[0]
-        device = features.device
-        
-        # 计算密度：使用k-NN
-        densities = self._compute_density(features)  # [N]
-        
-        # 计算不确定性（熵）
-        uncertainties = self._compute_uncertainty(logits)  # [N]
-        
-        # 反课程权重：优先选择低密度高不确定性的样本
-        weights = (1.0 / (densities + 1e-8)) * uncertainties  # [N]
-        
-        # 归一化权重
-        weights = weights / (weights.sum() + 1e-8)
-        
+        weights = self.compute_sampling_weights(features, logits)
+
         # 采样（float32→numpy 后概率和可能略偏离 1，np.random.choice 会报错）
         probs = np.asarray(weights.detach().cpu().numpy(), dtype=np.float64)
         probs = np.clip(probs, 0.0, None)
@@ -161,6 +204,37 @@ class UncertaintyGuidedSampler:
         )
         
         return sampled_indices
+
+    def compute_sampling_weights(
+        self,
+        features: torch.Tensor,
+        logits: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        为 Stage 4 返回每个样本的采样权重，便于直接接入 WeightedRandomSampler。
+
+        相比原始“低密度样本独占高权重”的实现，这里引入：
+        1. 不确定性归一化
+        2. 低密度连续得分而非硬二值开关
+        3. 与均匀分布混合，避免采样过度集中
+        """
+        densities = self._compute_density(features)  # [N]
+        uncertainties = self._compute_uncertainty(logits)  # [N]
+
+        low_density_threshold = torch.quantile(densities, self.low_density_ratio)
+        density_gap = (low_density_threshold - densities).clamp_min(0.0)
+        low_density_score = density_gap / (density_gap.max() + 1e-8)
+
+        uncertainty_score = uncertainties / (uncertainties.max() + 1e-8)
+
+        raw_scores = self.uncertainty_weight * uncertainty_score + 1.5 * low_density_score
+        raw_scores = raw_scores + 0.1
+        raw_scores = raw_scores / (raw_scores.sum() + 1e-8)
+
+        n = raw_scores.numel()
+        uniform = torch.full_like(raw_scores, 1.0 / max(n, 1))
+        weights = (1.0 - self.uniform_mix) * raw_scores + self.uniform_mix * uniform
+        return weights / (weights.sum() + 1e-8)
     
     def _compute_density(self, features: torch.Tensor, k: int = 5) -> torch.Tensor:
         """计算k-NN密度"""
@@ -184,10 +258,7 @@ class UncertaintyGuidedSampler:
             (1 - probs) * torch.log(1 - probs + 1e-8)
         ).sum(dim=1)
         
-        # 不确定性权重
-        uncertainty_weights = 1.0 / (entropy + 1e-8)
-        
-        return uncertainty_weights
+        return entropy
 
 
 class BatchIntensityAwareSampler:

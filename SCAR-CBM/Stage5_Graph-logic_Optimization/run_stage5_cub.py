@@ -4,8 +4,8 @@ Stage 5（CUB）：用 Stage2 / Stage3 / Stage4 的 npz 输出驱动 `Conceptual
 
 前提（与当前仓库脚本一致）:
   - Stage2 对 CUB **train** 全量按固定顺序导出 `stage2_features.npz`（行顺序 = `run_stage2.load_cub_images` = Stage1 概念矩阵行顺序）。
-  - Stage3 使用 `--cub-root` + `--labeled-fraction` 时，会在 `stage3_pseudo_labels.npz` 中写入
-    `labeled_row_indices` / `unlabeled_row_indices`（相对上述全量 train 的行号）。
+  - Stage3 默认会按 CUB train 的 10%% / 90%% 划分有标签/无标签，并在 `stage3_pseudo_labels.npz` 中写入
+    `labeled_row_indices` / `unlabeled_row_indices`（相对上述全量 train 的行号）；也可用 `--labeled-fraction` 显式改比例。
   - Stage4 默认在 **全量** Stage2 npz（N = CUB train 样本数）上采样，得到 **全局行号** `sampled_indices`；
     若你在「仅无标签」子集上另存了 npz 再跑 Stage4，则索引为 **局部**（`num_samples` = 无标签子集大小）。
 
@@ -32,10 +32,12 @@ import importlib.util
 import json
 import os
 import sys
+import tarfile
 from typing import Dict, Optional, Tuple
 
 import numpy as np
 import torch
+from PIL import Image
 from torch.utils.data import DataLoader, Subset
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -46,6 +48,7 @@ for p in (_ROOT, _STAGE5):
 
 from network_architecture import CompleteModel
 from stage5_framework import ConceptualSSLFramework
+from stage_output_utils import find_latest_output_dir, find_latest_output_file, resolve_default_output_dir
 
 
 def _load_module(path: str, name: str):
@@ -74,6 +77,118 @@ def _load_npz(path: str) -> Dict[str, np.ndarray]:
         raise FileNotFoundError(f"缺少文件: {path}")
     with np.load(path, allow_pickle=False) as z:
         return {k: z[k] for k in z.files}
+
+
+def _maybe_extract_segmentations(cub_root: str) -> str:
+    cub_root_abs = os.path.abspath(cub_root)
+    seg_dir = os.path.join(cub_root_abs, "segmentations")
+    if os.path.isdir(seg_dir):
+        return seg_dir
+
+    archive = os.path.join(os.path.dirname(cub_root_abs), "segmentations.tgz")
+    if not os.path.isfile(archive):
+        raise FileNotFoundError(
+            f"缺少 segmentation 目录且未找到压缩包: {archive}"
+        )
+
+    with tarfile.open(archive, "r:gz") as tf:
+        tf.extractall(path=cub_root_abs)
+    if not os.path.isdir(seg_dir):
+        raise FileNotFoundError(f"解压后仍未找到 segmentation 目录: {seg_dir}")
+    return seg_dir
+
+
+def load_cub_segmentations(
+    cub_root: str,
+    split: str = "train",
+    image_size: int = 224,
+    max_samples: int = 0,
+) -> np.ndarray:
+    cub_root_abs = os.path.abspath(cub_root)
+    images_txt = os.path.join(cub_root_abs, "images.txt")
+    split_txt = os.path.join(cub_root_abs, "train_test_split.txt")
+    seg_dir = _maybe_extract_segmentations(cub_root_abs)
+
+    id_to_relpath = {}
+    with open(images_txt, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            parts = line.strip().split(maxsplit=1)
+            if len(parts) != 2:
+                continue
+            id_to_relpath[int(parts[0])] = parts[1]
+
+    selected_ids = []
+    with open(split_txt, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) < 2:
+                continue
+            img_id, is_train = int(parts[0]), int(parts[1])
+            if split == "train" and is_train != 1:
+                continue
+            if split == "test" and is_train != 0:
+                continue
+            selected_ids.append(img_id)
+
+    if max_samples > 0:
+        selected_ids = selected_ids[:max_samples]
+
+    masks = []
+    for img_id in selected_ids:
+        relpath = id_to_relpath.get(img_id)
+        if relpath is None:
+            continue
+        mask_rel = os.path.splitext(relpath)[0] + ".png"
+        mask_path = os.path.join(seg_dir, mask_rel)
+        if not os.path.isfile(mask_path):
+            raise FileNotFoundError(f"缺少 segmentation mask: {mask_path}")
+        with Image.open(mask_path) as img:
+            img = img.convert("L")
+            if image_size > 0:
+                img = img.resize((image_size, image_size), Image.NEAREST)
+            arr = (np.asarray(img, dtype=np.uint8) > 0).astype(np.uint8)
+        masks.append(arr[None, ...])
+
+    if not masks:
+        raise ValueError(
+            f"在 CUB segmentation 中未读取到 mask。cub_root={cub_root_abs}, split={split}"
+        )
+    return np.stack(masks, axis=0)
+
+
+def _random_horizontal_flip(x: torch.Tensor, p: float = 0.5) -> torch.Tensor:
+    if torch.rand(()) < p:
+        x = torch.flip(x, dims=(2,))
+    return x
+
+
+def _weak_augment(x: torch.Tensor) -> torch.Tensor:
+    x = x.float().clamp(0.0, 1.0)
+    return _random_horizontal_flip(x, p=0.5)
+
+
+def _strong_augment(x: torch.Tensor) -> torch.Tensor:
+    x = x.float().clamp(0.0, 1.0)
+    x = _random_horizontal_flip(x, p=0.5)
+
+    if torch.rand(()) < 0.8:
+        brightness = 0.7 + 0.6 * torch.rand((), dtype=x.dtype)
+        x = x * brightness
+
+    if torch.rand(()) < 0.8:
+        mean = x.mean(dim=(1, 2), keepdim=True)
+        contrast = 0.7 + 0.6 * torch.rand((), dtype=x.dtype)
+        x = (x - mean) * contrast + mean
+
+    if torch.rand(()) < 0.3:
+        gray = x.mean(dim=0, keepdim=True)
+        x = gray.repeat(x.shape[0], 1, 1)
+
+    if torch.rand(()) < 0.5:
+        noise = 0.03 * torch.randn_like(x)
+        x = x + noise
+
+    return x.clamp(0.0, 1.0)
 
 
 def _map_stage4_to_unlabeled_local(
@@ -131,6 +246,7 @@ def build_loaders(
     y_labeled_val: np.ndarray,
     c_labeled_val: np.ndarray,
     X_unlabeled: np.ndarray,
+    unlabeled_contour_masks: Optional[np.ndarray],
     unlabeled_pool_indices: Optional[np.ndarray],
     batch_size_labeled: int,
     batch_size_unlabeled: int,
@@ -139,7 +255,12 @@ def build_loaders(
 
     train_lab = LabeledDataset(X_labeled_train, y_labeled_train, c_labeled_train)
     val_lab = LabeledDataset(X_labeled_val, y_labeled_val, c_labeled_val)
-    unlabeled_ds = UnlabeledDataset(X_unlabeled)
+    unlabeled_ds = UnlabeledDataset(
+        X_unlabeled,
+        transform=_weak_augment,
+        strong_transform=_strong_augment,
+        contour_masks=unlabeled_contour_masks,
+    )
 
     if unlabeled_pool_indices is not None and len(unlabeled_pool_indices) > 0:
         unlabeled_ds = Subset(unlabeled_ds, unlabeled_pool_indices.tolist())
@@ -166,25 +287,24 @@ def build_loaders(
 
 
 def main() -> None:
-    default_stage1 = os.path.join(_ROOT, "Stage1", "stage1_cub_output")
+    default_stage1 = find_latest_output_dir(
+        os.path.join(_ROOT, 'Stage1'), 'stage1_cub_output'
+    )
     default_cub = os.path.join(_ROOT, "Data", "CUB_200_2011")
-    default_s2 = os.path.join(
-        _ROOT,
-        "Stage2_Semantic-feature-extraction",
-        "stage2_output",
-        "stage2_features.npz",
+    default_s2 = find_latest_output_file(
+        os.path.join(_ROOT, 'Stage2_Semantic-feature-extraction'),
+        'stage2_output',
+        'stage2_features.npz',
     )
-    default_s3 = os.path.join(
-        _ROOT,
-        "Stage3_Pseudo-label",
-        "stage3_output",
-        "stage3_pseudo_labels.npz",
+    default_s3 = find_latest_output_file(
+        os.path.join(_ROOT, 'Stage3_Pseudo-label'),
+        'stage3_output',
+        'stage3_pseudo_labels.npz',
     )
-    default_s4 = os.path.join(
-        _ROOT,
-        "Stage4_Anti-curriculum",
-        "stage4_output",
-        "stage4_sampled_indices.npz",
+    default_s4 = find_latest_output_file(
+        os.path.join(_ROOT, 'Stage4_Anti-curriculum'),
+        'stage4_output',
+        'stage4_sampled_indices.npz',
     )
 
     parser = argparse.ArgumentParser(description="Stage 5 CUB：衔接 Stage2/3/4 npz 的训练")
@@ -239,7 +359,7 @@ def main() -> None:
         "--output-dir",
         type=str,
         default=None,
-        help="若设置，写入 stage5_cub_training_summary.json",
+        help="训练摘要输出目录；未提供时默认写入 Stage5_Graph-logic_Optimization/stage5_output_<HH-MM_YYMMDD>/",
     )
     parser.add_argument(
         "--save-weights",
@@ -302,6 +422,17 @@ def run_stage5_cub_training(args) -> None:
     X_lab = images[lab_idx]
     y_lab = gt[lab_idx]
     X_unl = images[unl_idx]
+    contour_masks_all = load_cub_segmentations(
+        args.cub_root,
+        split="train",
+        image_size=args.image_size,
+        max_samples=0,
+    )
+    if contour_masks_all.shape[0] != n_img:
+        raise ValueError(
+            f"CUB contour mask 数 {contour_masks_all.shape[0]} 与图像数 {n_img} 不一致。"
+        )
+    contour_masks_unl = contour_masks_all[unl_idx]
 
     n_lab = X_lab.shape[0]
     if n_lab < 2:
@@ -346,6 +477,7 @@ def run_stage5_cub_training(args) -> None:
         y_lv,
         c_lv,
         X_unl,
+        contour_masks_unl,
         unlabeled_pool,
         args.batch_size_labeled,
         args.batch_size_unlabeled,
@@ -387,6 +519,12 @@ def run_stage5_cub_training(args) -> None:
         )
     prebuilt = _HypergraphAdjWrapper(args.num_concepts, adj_matrix.cpu())
 
+    output_dir = resolve_default_output_dir(
+        os.path.dirname(os.path.abspath(__file__)),
+        'stage5_output',
+        args.output_dir,
+    )
+
     history = framework.fit(
         train_labeled_loader=train_labeled_loader,
         train_unlabeled_loader=train_unlabeled_loader,
@@ -395,9 +533,9 @@ def run_stage5_cub_training(args) -> None:
         contour_mask=None,
     )
 
-    if args.output_dir:
-        os.makedirs(args.output_dir, exist_ok=True)
-        out_json = os.path.join(args.output_dir, "stage5_cub_training_summary.json")
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        out_json = os.path.join(output_dir, "stage5_cub_training_summary.json")
         serializable = {k: [float(x) for x in v] for k, v in history.items()}
         payload = {
             "meta": {

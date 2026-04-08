@@ -81,7 +81,7 @@ class NegativeSampleQueue:
     
     def get_negatives(self, k: int = 256) -> Optional[torch.Tensor]:
         """随机采样负样本"""
-        if len(self.queue) < k:
+        if k <= 0 or len(self.queue) < k:
             return None
         
         indices = np.random.choice(len(self.queue), k, replace=False)
@@ -105,12 +105,16 @@ class PseudoLabelHistory:
     def get_consistency(self, sample_ids: np.ndarray, 
                        new_labels: torch.Tensor) -> torch.Tensor:
         """计算与历史标签的一致性"""
-        consistency = torch.ones(len(sample_ids))
+        consistency = torch.ones(
+            len(sample_ids), device=new_labels.device, dtype=new_labels.dtype
+        )
         
         for idx, sid in enumerate(sample_ids):
             if len(self.history[sid]) > 0:
                 # 计算余弦相似度
-                past_labels = torch.stack(list(self.history[sid]))
+                past_labels = torch.stack(list(self.history[sid])).to(
+                    device=new_labels.device, dtype=new_labels.dtype
+                )
                 curr_label = new_labels[idx]
                 sim = F.cosine_similarity(
                     curr_label.unsqueeze(0),
@@ -120,62 +124,114 @@ class PseudoLabelHistory:
         
         return consistency
 
+    def get_history_mean(
+        self, sample_ids: np.ndarray, device: torch.device, dtype: torch.dtype
+    ) -> torch.Tensor:
+        """返回每个样本的历史伪标签均值；无历史则返回 0。"""
+        if len(sample_ids) == 0:
+            return torch.empty(0, device=device, dtype=dtype)
+
+        feature_dim = None
+        for sid in sample_ids:
+            if len(self.history[sid]) > 0:
+                feature_dim = int(self.history[sid][0].numel())
+                break
+        if feature_dim is None:
+            raise ValueError("get_history_mean 需要至少一个存在历史记录的样本")
+
+        out = torch.zeros(len(sample_ids), feature_dim, device=device, dtype=dtype)
+        for idx, sid in enumerate(sample_ids):
+            if len(self.history[sid]) == 0:
+                continue
+            past_labels = torch.stack(list(self.history[sid])).to(device=device, dtype=dtype)
+            out[idx] = past_labels.mean(dim=0)
+        return out
+
+
+def _to_tensor(sample):
+    if isinstance(sample, torch.Tensor):
+        return sample.detach().clone().float()
+    arr = np.asarray(sample)
+    return torch.from_numpy(np.ascontiguousarray(arr)).float()
+
 
 class UnlabeledDataset(Dataset):
     """无标签数据集"""
     
-    def __init__(self, data: np.ndarray, transform=None, strong_transform=None):
+    def __init__(self, data: np.ndarray, transform=None, strong_transform=None,
+                 contour_masks: Optional[np.ndarray] = None):
         self.data = data
         self.transform = transform
         self.strong_transform = strong_transform
+        self.contour_masks = contour_masks
     
     def __len__(self):
         return len(self.data)
     
     def __getitem__(self, idx):
-        x = self.data[idx]
-        
+        x = _to_tensor(self.data[idx])
+        base = x.clone()
+
         if self.transform:
-            x_weak = self.transform(x)
+            x_weak = self.transform(base.clone())
         else:
-            x_weak = x
+            x_weak = base.clone()
         
         if self.strong_transform:
-            x_strong = self.strong_transform(x)
+            x_strong = self.strong_transform(base.clone())
         else:
-            x_strong = x
-        
-        return x_weak, x_strong, idx
+            x_strong = base.clone()
+
+        if self.contour_masks is None:
+            return x_weak, x_strong, idx
+
+        contour_mask = _to_tensor(self.contour_masks[idx])
+        return x_weak, x_strong, idx, contour_mask
 
 
 class LabeledDataset(Dataset):
     """有标签数据集"""
     
     def __init__(self, images: np.ndarray, labels: np.ndarray, 
-                 concept_ids: np.ndarray, transform=None):
+                 concept_ids: np.ndarray, transform=None,
+                 contour_masks: Optional[np.ndarray] = None):
         self.images = images
         self.labels = labels
         self.concept_ids = concept_ids
         self.transform = transform
+        self.contour_masks = contour_masks
     
     def __len__(self):
         return len(self.images)
     
     def __getitem__(self, idx):
-        x = self.images[idx]
+        x = _to_tensor(self.images[idx])
         if self.transform:
             x = self.transform(x)
-        
-        return x, self.labels[idx], self.concept_ids[idx], idx
+
+        y = _to_tensor(self.labels[idx])
+        c = _to_tensor(self.concept_ids[idx])
+        if self.contour_masks is None:
+            return x, y, c, idx
+
+        contour_mask = _to_tensor(self.contour_masks[idx])
+        return x, y, c, idx, contour_mask
 
 
 # ============ 辅助函数 ============
 
 def compute_entropy(logits: torch.Tensor) -> torch.Tensor:
-    """计算样本的熵"""
-    probs = F.softmax(logits, dim=-1)
-    entropy = -(probs * torch.log(probs + 1e-8)).sum(dim=-1)
-    return entropy
+    """
+    多标签概念预测的不确定性：各概念独立二值熵之和（按样本）。
+
+    输入为 **logits**（与 BCEWithLogits、c_heatmap 一致）。勿对概念维做 softmax（会误当成互斥多类）。
+    """
+    probs = torch.sigmoid(logits)
+    ent = -(
+        probs * torch.log(probs + 1e-8)
+        + (1.0 - probs) * torch.log(1.0 - probs + 1e-8)
+    )
+    return ent.sum(dim=-1)
 
 
 def compute_density(features: torch.Tensor, k: int = 5) -> torch.Tensor:

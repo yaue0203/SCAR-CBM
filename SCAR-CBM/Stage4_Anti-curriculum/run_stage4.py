@@ -31,6 +31,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from pseudo_label_and_sampling import UncertaintyGuidedSampler
+from stage_output_utils import find_latest_output_file, resolve_default_output_dir
 
 
 def _load_npz(path: str) -> Dict[str, np.ndarray]:
@@ -100,11 +101,10 @@ def run_stage4_sample(
 
 
 def main() -> None:
-    default_unlabeled_npz = os.path.join(
-        _ROOT,
-        "Stage2_Semantic-feature-extraction",
-        "stage2_output",
-        "stage2_features.npz",
+    default_unlabeled_npz = find_latest_output_file(
+        os.path.join(_ROOT, 'Stage2_Semantic-feature-extraction'),
+        'stage2_output',
+        'stage2_features.npz',
     )
 
     parser = argparse.ArgumentParser(description="Stage 4 反课程采样（独立脚本）")
@@ -112,7 +112,7 @@ def main() -> None:
         "--unlabeled-npz",
         type=str,
         default=default_unlabeled_npz,
-        help="Stage2 输出 .npz（需包含 f_visual / c_heatmap）",
+        help="Stage2 输出 .npz（默认自动读取最新的 stage2_output_<HH-MM_YYMMDD>/stage2_features.npz）",
     )
     parser.add_argument(
         "--batch-size",
@@ -149,7 +149,7 @@ def main() -> None:
         "--out",
         type=str,
         default=None,
-        help="输出 .npz 路径，默认 Stage4_Anti-curriculum/stage4_output/stage4_sampled_indices.npz",
+        help="输出 .npz 路径；未提供时默认写入 Stage4_Anti-curriculum/stage4_output_<HH-MM_YYMMDD>/stage4_sampled_indices.npz",
     )
     args = parser.parse_args()
 
@@ -169,12 +169,14 @@ def main() -> None:
         device=device,
     )
 
-    default_out = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "stage4_output",
-        "stage4_sampled_indices.npz",
-    )
-    out_path = os.path.abspath(args.out or default_out)
+    if args.out:
+        out_path = os.path.abspath(args.out)
+    else:
+        out_dir = resolve_default_output_dir(
+            os.path.dirname(os.path.abspath(__file__)),
+            'stage4_output',
+        )
+        out_path = os.path.join(out_dir, 'stage4_sampled_indices.npz')
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
     payload: Dict[str, np.ndarray] = {

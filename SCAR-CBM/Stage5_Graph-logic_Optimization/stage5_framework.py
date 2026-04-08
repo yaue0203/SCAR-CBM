@@ -15,11 +15,14 @@ if _ROOT not in sys.path:
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 import numpy as np
 from typing import Dict, Optional, Tuple
 from collections import defaultdict
 import logging
+
+from scipy.special import expit
+from sklearn.metrics import balanced_accuracy_score, f1_score, roc_auc_score
 
 from core_modules import (
     ConceptHypergraph, NegativeSampleQueue, PseudoLabelHistory,
@@ -30,8 +33,99 @@ from pseudo_label_and_sampling import (
     PseudoLabelGenerator, UncertaintyGuidedSampler,
     CurriculumLearningScheduler
 )
-from loss_functions import MultiTaskLoss
+from loss_functions import MultiTaskLoss, SpatialConceptAlignmentLoss
 from stage1_hypergraph import build_concept_hypergraph as build_hypergraph_stage1
+
+
+def _multilabel_concept_and_class_metrics(
+    y_true: np.ndarray,
+    logits: np.ndarray,
+    thresholds: Optional[np.ndarray] = None,
+) -> Dict[str, float]:
+    """
+    多标签概念指标：
+    - c_acc / c_auc：micro（所有样本×概念位点池化）
+    - y_acc / y_auc：macro（逐概念维平均，class-level）
+    """
+    y_true = np.asarray(y_true, dtype=np.float64)
+    logits = np.asarray(logits, dtype=np.float64)
+    y_bin = (y_true >= 0.5).astype(np.int32)
+    probs = expit(logits)
+    if thresholds is None:
+        pred_bin = (probs >= 0.5).astype(np.int32)
+    else:
+        thr = np.asarray(thresholds, dtype=np.float64).reshape(1, -1)
+        pred_bin = (probs >= thr).astype(np.int32)
+
+    concept_acc_micro = float((pred_bin == y_bin).mean())
+
+    n_labels = y_bin.shape[1]
+    class_accs: list[float] = []
+    class_aucs: list[float] = []
+    class_bal_accs: list[float] = []
+    class_f1s: list[float] = []
+    for j in range(n_labels):
+        yj = y_bin[:, j]
+        pj = pred_bin[:, j]
+        sj = probs[:, j]
+        class_accs.append(float((pj == yj).mean()))
+        class_f1s.append(float(f1_score(yj, pj, zero_division=0)))
+        if int(yj.min()) != int(yj.max()):
+            class_bal_accs.append(float(balanced_accuracy_score(yj, pj)))
+            class_aucs.append(float(roc_auc_score(yj, sj)))
+
+    class_acc_macro = float(np.mean(class_accs)) if class_accs else float("nan")
+    class_auc_macro = float(np.mean(class_aucs)) if class_aucs else float("nan")
+    class_bal_acc_macro = float(np.mean(class_bal_accs)) if class_bal_accs else float("nan")
+    class_f1_macro = float(np.mean(class_f1s)) if class_f1s else float("nan")
+
+    try:
+        concept_auc_micro = float(roc_auc_score(y_bin, probs, average="micro"))
+    except ValueError:
+        concept_auc_micro = float("nan")
+
+    return {
+        "c_acc": concept_acc_micro,
+        "c_auc": concept_auc_micro,
+        "y_acc": class_acc_macro,
+        "y_auc": class_auc_macro,
+        "y_bal_acc": class_bal_acc_macro,
+        "y_f1": class_f1_macro,
+    }
+
+
+def _fit_per_concept_thresholds(
+    y_true: np.ndarray,
+    logits: np.ndarray,
+    num_candidates: int = 19,
+) -> np.ndarray:
+    """用训练集预测为每个概念单独选阈值。"""
+    y_true = np.asarray(y_true, dtype=np.float64)
+    logits = np.asarray(logits, dtype=np.float64)
+    y_bin = (y_true >= 0.5).astype(np.int32)
+    probs = expit(logits)
+    thresholds = np.full(y_bin.shape[1], 0.5, dtype=np.float64)
+    candidates = np.linspace(0.05, 0.95, num_candidates, dtype=np.float64)
+
+    for j in range(y_bin.shape[1]):
+        yj = y_bin[:, j]
+        if int(yj.min()) == int(yj.max()):
+            continue
+        pj = probs[:, j]
+        best_thr = 0.5
+        best_bal_acc = -1.0
+        best_f1 = -1.0
+        for thr in candidates:
+            pred = (pj >= thr).astype(np.int32)
+            bal_acc = float(balanced_accuracy_score(yj, pred))
+            f1 = float(f1_score(yj, pred, zero_division=0))
+            if bal_acc > best_bal_acc or (bal_acc == best_bal_acc and f1 > best_f1):
+                best_bal_acc = bal_acc
+                best_f1 = f1
+                best_thr = float(thr)
+        thresholds[j] = best_thr
+
+    return thresholds
 
 
 class ConceptualSSLFramework:
@@ -44,7 +138,9 @@ class ConceptualSSLFramework:
                  num_epochs: int = 100,
                  batch_size_labeled: int = 32,
                  batch_size_unlabeled: int = 64,
-                 learning_rate: float = 0.001):
+                 learning_rate: float = 0.001,
+                 lambda_spatial_align: float = 0.2,
+                 lambda_spatial_consistency: float = 0.15):
         """
         初始化框架
 
@@ -56,6 +152,8 @@ class ConceptualSSLFramework:
             batch_size_labeled: 有标签数据batch大小
             batch_size_unlabeled: 无标签数据batch大小
             learning_rate: 学习率
+            lambda_spatial_align: 图像空间热力图与概念标签对齐损失权重（0 关闭）
+            lambda_spatial_consistency: weak/strong 空间热力图一致性损失权重（0 关闭）
         """
         self.device = torch.device(device)
         self.model = model.to(self.device)
@@ -72,6 +170,9 @@ class ConceptualSSLFramework:
 
         # 损失函数
         self.loss_fn = MultiTaskLoss()
+        self.lambda_spatial_align = float(lambda_spatial_align)
+        self.lambda_spatial_consistency = float(lambda_spatial_consistency)
+        self.spatial_align_loss = SpatialConceptAlignmentLoss()
 
         # 学习率调度器
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
@@ -92,6 +193,7 @@ class ConceptualSSLFramework:
         # 日志
         self.logger = self._setup_logger()
         self.metrics = defaultdict(list)
+        self.eval_thresholds: Optional[np.ndarray] = None
 
     def _setup_logger(self):
         """设置日志"""
@@ -147,7 +249,8 @@ class ConceptualSSLFramework:
                               c_heatmap: torch.Tensor,
                               features_labeled: torch.Tensor,
                               labels_labeled: torch.Tensor,
-                              contour_mask: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+                              contour_mask: Optional[torch.Tensor] = None,
+                              sample_ids: Optional[np.ndarray] = None) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Stage 3: 自适应伪标签生成
 
@@ -169,7 +272,7 @@ class ConceptualSSLFramework:
 
         # 伪标签生成
         c_pseudo, m_rel = self.pseudo_label_generator.generate(
-            c_heatmap, c_knn, contour_mask, self.pseudo_label_history
+            c_heatmap, c_knn, contour_mask, self.pseudo_label_history, sample_ids
         )
 
         return c_pseudo, m_rel
@@ -193,6 +296,60 @@ class ConceptualSSLFramework:
         """
         sampled_indices = self.sampler.sample(features, logits, batch_size)
         return sampled_indices
+
+    def build_unlabeled_epoch_loader(self,
+                                     train_unlabeled_loader: DataLoader,
+                                     adj_matrix: torch.Tensor) -> Tuple[DataLoader, float]:
+        """
+        使用 Stage 4 权重为当前 epoch 重建无标签 DataLoader。
+        返回新的 loader 以及本轮采样后唯一样本占比。
+        """
+        dataset = train_unlabeled_loader.dataset
+        total_unlabeled = len(dataset)
+        if total_unlabeled == 0:
+            return train_unlabeled_loader, 0.0
+
+        was_training = self.model.training
+        self.model.eval()
+
+        all_features = []
+        all_logits = []
+
+        with torch.no_grad():
+            for batch in train_unlabeled_loader:
+                x_u_weak = batch[0].to(self.device)
+                outputs = self.extract_features(x_u_weak, adj_matrix)
+                all_features.append(outputs['f_visual'].detach())
+                all_logits.append(outputs['c_heatmap'].detach())
+
+        if was_training:
+            self.model.train()
+
+        features = torch.cat(all_features, dim=0)
+        logits = torch.cat(all_logits, dim=0)
+
+        sampled_indices = self.sample_unlabeled_data(features, logits, total_unlabeled)
+        sampled_unique_ratio = float(len(np.unique(sampled_indices))) / float(total_unlabeled)
+
+        dataset_weights = self.sampler.compute_sampling_weights(features, logits).detach().cpu()
+        dataset_weights = dataset_weights.to(dtype=torch.double)
+
+        weighted_sampler = WeightedRandomSampler(
+            weights=dataset_weights,
+            num_samples=total_unlabeled,
+            replacement=True,
+        )
+
+        unlabeled_loader = DataLoader(
+            dataset,
+            batch_size=train_unlabeled_loader.batch_size,
+            sampler=weighted_sampler,
+            num_workers=train_unlabeled_loader.num_workers,
+            collate_fn=train_unlabeled_loader.collate_fn,
+            pin_memory=train_unlabeled_loader.pin_memory,
+            drop_last=train_unlabeled_loader.drop_last,
+        )
+        return unlabeled_loader, sampled_unique_ratio
 
     # ==================== 训练步骤 ====================
 
@@ -220,20 +377,29 @@ class ConceptualSSLFramework:
         # 获取所有有标签数据
         all_features_labeled = []
         all_labels_labeled = []
+        all_logits_labeled = []
 
-        for x_l, y_l, c_l, _ in train_labeled_loader:
+        for batch_l in train_labeled_loader:
+            x_l, y_l, c_l, _ = batch_l[:4]
             x_l = x_l.to(self.device)
             y_l = y_l.to(self.device)
 
             outputs_l = self.extract_features(x_l, adj_matrix)
             all_features_labeled.append(outputs_l['f_visual'].detach())
             all_labels_labeled.append(y_l.detach())
+            all_logits_labeled.append(outputs_l['c_heatmap'].detach())
 
         features_labeled = torch.cat(all_features_labeled, dim=0)
         labels_labeled = torch.cat(all_labels_labeled, dim=0)
+        logits_labeled = torch.cat(all_logits_labeled, dim=0)
+        self.eval_thresholds = _fit_per_concept_thresholds(
+            labels_labeled.detach().cpu().numpy(),
+            logits_labeled.detach().cpu().numpy(),
+        )
 
         # 训练有标签数据
-        for x_l, y_l, c_l, idx_l in train_labeled_loader:
+        for batch_l in train_labeled_loader:
+            x_l, y_l, c_l, idx_l = batch_l[:4]
             x_l = x_l.to(self.device)
             y_l = y_l.to(self.device)
 
@@ -247,18 +413,35 @@ class ConceptualSSLFramework:
             loss_supervised = nn.functional.binary_cross_entropy_with_logits(
                 c_heatmap_l, y_l
             )
+            loss_total = loss_supervised
+            if self.lambda_spatial_align > 0.0:
+                smap = outputs_l.get("spatial_concept_heatmap")
+                if smap is not None:
+                    loss_spa = self.spatial_align_loss(smap, y_l)
+                    loss_total = loss_total + self.lambda_spatial_align * loss_spa
+                    epoch_losses["L_spatial_align"] += loss_spa.item()
 
-            loss_supervised.backward()
+            loss_total.backward()
             self.optimizer.step()
 
             epoch_losses['L_supervised'] += loss_supervised.item()
             num_batches += 1
 
-        # 训练无标签数据
-        unlabeled_iterator = iter(train_unlabeled_loader)
-        for x_u_weak, x_u_strong, idx_u in unlabeled_iterator:
+        # 训练无标签数据（Stage 4: 先为当前 epoch 重建采样后的无标签 loader）
+        sampled_unlabeled_loader, sampled_unique_ratio = self.build_unlabeled_epoch_loader(
+            train_unlabeled_loader,
+            adj_matrix,
+        )
+        epoch_losses['stage4_unique_ratio'] += sampled_unique_ratio
+
+        unlabeled_iterator = iter(sampled_unlabeled_loader)
+        for batch_u in unlabeled_iterator:
+            x_u_weak, x_u_strong, idx_u = batch_u[:3]
+            batch_contour_mask = batch_u[3] if len(batch_u) > 3 else contour_mask
             x_u_weak = x_u_weak.to(self.device)
             x_u_strong = x_u_strong.to(self.device)
+            if batch_contour_mask is not None:
+                batch_contour_mask = batch_contour_mask.to(self.device)
 
             self.optimizer.zero_grad()
 
@@ -274,13 +457,27 @@ class ConceptualSSLFramework:
             c_pseudo, m_rel = self.generate_pseudo_labels(
                 f_visual_weak, c_heatmap,
                 features_labeled, labels_labeled,
-                contour_mask
+                batch_contour_mask,
+                sample_ids=idx_u.detach().cpu().numpy().astype(np.int64),
             )
+
+            reliable_mask = m_rel > 0
+            if bool(reliable_mask.any()):
+                idx_u_np = idx_u.detach().cpu().numpy().astype(np.int64)
+                self.pseudo_label_history.update(
+                    idx_u_np[reliable_mask.detach().cpu().numpy()],
+                    c_pseudo.detach()[reliable_mask],
+                )
 
             # 计算样本权重（基于不确定性）
             uncertainties = compute_entropy(c_heatmap)
             sample_weights = 1.0 / (uncertainties + 1e-8)
-            sample_weights = sample_weights / sample_weights.sum()
+
+            negative_features = self.negative_queue.get_negatives(
+                k=min(256, len(self.negative_queue.queue))
+            )
+            if negative_features is not None:
+                negative_features = negative_features.to(self.device)
 
             # 计算多任务损失
             losses_dict = self.loss_fn(
@@ -292,16 +489,16 @@ class ConceptualSSLFramework:
                 f_strong=f_visual_strong,
                 m_rel=m_rel,
                 c_graph=outputs_weak.get('c_graph'),
-                contour_mask=contour_mask,
+                contour_mask=batch_contour_mask,
+                spatial_heatmap=outputs_weak.get('spatial_concept_heatmap'),
+                spatial_heatmap_strong=outputs_strong.get('spatial_concept_heatmap'),
+                negative_features=negative_features,
                 sample_weights=sample_weights
             )
 
-            # 仅计算半监督损失
-            loss = (
-                0.5 * losses_dict.get('L_align', 0.0) +
-                0.3 * losses_dict.get('L_consistency', 0.0) +
-                0.2 * losses_dict.get('L_geo', 0.0)
-            )
+            loss = losses_dict['L_total']
+            if self.lambda_spatial_consistency > 0.0:
+                loss = loss + self.lambda_spatial_consistency * losses_dict['L_spatial_consistency']
 
             if loss > 0:
                 loss.backward()
@@ -341,6 +538,8 @@ class ConceptualSSLFramework:
         self.model.eval()
         total_loss = 0.0
         num_samples = 0
+        ys_list: list[np.ndarray] = []
+        logits_list: list[np.ndarray] = []
 
         with torch.no_grad():
             for x, y, _, _ in val_loader:
@@ -356,10 +555,25 @@ class ConceptualSSLFramework:
 
                 total_loss += loss.item() * x.shape[0]
                 num_samples += x.shape[0]
+                ys_list.append(y.detach().cpu().numpy())
+                logits_list.append(c_heatmap.detach().cpu().numpy())
 
         avg_loss = total_loss / max(num_samples, 1)
-
-        return {'val_loss': avg_loss}
+        y_all = np.concatenate(ys_list, axis=0)
+        logits_all = np.concatenate(logits_list, axis=0)
+        m = _multilabel_concept_and_class_metrics(y_all, logits_all)
+        tuned = {}
+        if self.eval_thresholds is not None:
+            tuned_metrics = _multilabel_concept_and_class_metrics(
+                y_all, logits_all, thresholds=self.eval_thresholds
+            )
+            tuned = {
+                "c_acc_tuned": tuned_metrics["c_acc"],
+                "y_acc_tuned": tuned_metrics["y_acc"],
+                "y_bal_acc_tuned": tuned_metrics["y_bal_acc"],
+                "y_f1_tuned": tuned_metrics["y_f1"],
+            }
+        return {"val_loss": avg_loss, **m, **tuned}
 
     def fit(
         self,
@@ -411,8 +625,13 @@ class ConceptualSSLFramework:
 
         adj_matrix = self.hypergraph.get_adjacency_matrix(self.device)
 
-        # 初始化伪标签历史
-        total_unlabeled = len(train_unlabeled_loader.dataset)
+        # 初始化伪标签历史。若无标签集经过 Subset 过滤，history 仍按原始索引空间分配，
+        # 以兼容 DataLoader 返回的原始 sample id。
+        unlabeled_dataset = train_unlabeled_loader.dataset
+        if hasattr(unlabeled_dataset, 'indices') and len(unlabeled_dataset.indices) > 0:
+            total_unlabeled = int(max(unlabeled_dataset.indices)) + 1
+        else:
+            total_unlabeled = len(unlabeled_dataset)
         self.pseudo_label_history = PseudoLabelHistory(total_unlabeled)
 
         training_history = defaultdict(list)
@@ -443,7 +662,29 @@ class ConceptualSSLFramework:
 
             for key, val in val_metrics.items():
                 training_history[key].append(val)
-                self.logger.info(f"  {key}: {val:.4f}")
+                if isinstance(val, float) and val != val:
+                    self.logger.info(f"  {key}: nan")
+                else:
+                    self.logger.info(f"  {key}: {val:.4f}")
+
+            def _fmt(v: float) -> str:
+                if isinstance(v, float) and v != v:
+                    return "nan"
+                return f"{v:.4f}"
+
+            self.logger.info(
+                f"  [验证] c_acc={_fmt(val_metrics['c_acc'])} c_auc={_fmt(val_metrics['c_auc'])} "
+                f"y_acc={_fmt(val_metrics['y_acc'])} y_auc={_fmt(val_metrics['y_auc'])} "
+                f"y_bal_acc={_fmt(val_metrics['y_bal_acc'])} y_f1={_fmt(val_metrics['y_f1'])} "
+                f"(c=micro, y=逐概念macro)"
+            )
+            if 'c_acc_tuned' in val_metrics:
+                self.logger.info(
+                    f"  [阈值校准] c_acc_tuned={_fmt(val_metrics['c_acc_tuned'])} "
+                    f"y_acc_tuned={_fmt(val_metrics['y_acc_tuned'])} "
+                    f"y_bal_acc_tuned={_fmt(val_metrics['y_bal_acc_tuned'])} "
+                    f"y_f1_tuned={_fmt(val_metrics['y_f1_tuned'])}"
+                )
 
             # 学习率调度
             self.scheduler.step()
@@ -465,7 +706,6 @@ class ConceptualSSLFramework:
 
         self.logger.info(f"\nTraining completed!")
         return dict(training_history)
-
 
 # ==================== 使用示例 ====================
 

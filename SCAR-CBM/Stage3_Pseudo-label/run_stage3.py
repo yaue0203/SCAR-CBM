@@ -8,7 +8,7 @@
 
 典型用法（在 SCAR-CBM 根目录）:
   python "Stage3_Pseudo-label/run_stage3.py" \
-      --unlabeled-npz "Stage2-Semantic feature extraction/stage2_output/stage2_features.npz" \
+      --unlabeled-npz "Stage2_Semantic-feature-extraction/stage2_output/stage2_features.npz" \
       --labeled-features-npy your_labeled_features.npy \
       --labeled-labels-npy your_labeled_labels.npy \
       --num-concepts 312
@@ -17,8 +17,12 @@
   python "Stage3_Pseudo-label/run_stage3.py" \
       --unlabeled-npz .../stage2_features.npz \
       --cub-root Data/CUB_200_2011 \
-      --labeled-fraction 0.1 \
       --split-seed 42 \
+      --num-concepts 312
+
+  # 默认行为：若未提供手工 labeled 输入，则自动按 CUB train 的 10%% / 90%% 划分
+  python "Stage3_Pseudo-label/run_stage3.py" \
+      --unlabeled-npz .../stage2_features.npz \
       --num-concepts 312
 """
 from __future__ import annotations
@@ -39,10 +43,11 @@ if _ROOT not in sys.path:
 
 from core_modules import PseudoLabelHistory, knn_retrieval
 from pseudo_label_and_sampling import PseudoLabelGenerator
+from stage_output_utils import find_latest_output_file, resolve_default_output_dir
 
 
-def _load_cub_train_concept_loader() -> Callable[..., Tuple[np.ndarray, dict]]:
-    """复用 Stage1 中与 CUB train 顺序一致的概念矩阵构造逻辑。"""
+def _load_cub_stage1_module():
+    """复用 Stage1 中与 CUB train 顺序一致的概念矩阵与抽样逻辑。"""
     stage1_path = os.path.join(_ROOT, "Stage1", "run_cub_stage1.py")
     if not os.path.isfile(stage1_path):
         raise FileNotFoundError(f"未找到 {stage1_path}，无法加载 CUB 概念真值")
@@ -51,7 +56,11 @@ def _load_cub_train_concept_loader() -> Callable[..., Tuple[np.ndarray, dict]]:
         raise RuntimeError(f"无法加载模块: {stage1_path}")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    return mod.load_cub_train_concept_matrix
+    return mod
+
+
+def _load_cub_train_concept_loader() -> Callable[..., Tuple[np.ndarray, dict]]:
+    return _load_cub_stage1_module().load_cub_train_concept_matrix
 
 
 def split_cub_labeled_fraction(
@@ -70,7 +79,7 @@ def split_cub_labeled_fraction(
 ]:
     """
     将 Stage2 的 train 特征按行与 CUB 官方 train 概念矩阵对齐后，
-    随机划分 labeled / unlabeled（默认 10% 有标签）。
+    使用与 Stage1 完全一致的抽样逻辑划分 labeled / unlabeled。
 
     gt_concepts: [N, num_concepts]，须与 f_visual 行顺序一致（与 Stage1 run_cub_stage1 相同）。
     """
@@ -84,16 +93,21 @@ def split_cub_labeled_fraction(
         raise ValueError("c_heatmap 样本数与 f_visual 不一致")
     if n < 2:
         raise ValueError("Stage2 样本数至少为 2 才能做有标签/无标签划分")
-    if not (0.0 < labeled_fraction < 1.0):
-        raise ValueError("--labeled-fraction 必须在 (0, 1) 内，例如 0.1 表示 10%")
+    if not (0.0 < labeled_fraction <= 1.0):
+        raise ValueError("--labeled-fraction 必须在 (0, 1] 内，例如 0.1 表示 10%")
 
-    rng = np.random.RandomState(seed)
-    n_lab = max(1, int(round(n * labeled_fraction)))
-    n_lab = min(n_lab, n - 1)
+    stage1_mod = _load_cub_stage1_module()
+    _, labeled_idx = stage1_mod.sample_labeled_rows(
+        gt_concepts,
+        ratio=float(labeled_fraction),
+        seed=int(seed),
+    )
+    labeled_idx = labeled_idx.astype(np.int64, copy=False)
+    all_idx = np.arange(n, dtype=np.int64)
+    unlabeled_idx = np.setdiff1d(all_idx, labeled_idx, assume_unique=True)
 
-    perm = rng.permutation(n)
-    labeled_idx = np.sort(perm[:n_lab].astype(np.int64))
-    unlabeled_idx = np.sort(perm[n_lab:].astype(np.int64))
+    if unlabeled_idx.size == 0:
+        raise ValueError("有标签比例过高，导致无标签集合为空；Stage3 需要至少 1 个无标签样本")
 
     f_l = f_visual[labeled_idx]
     y_l = torch.from_numpy(gt_concepts[labeled_idx].astype(np.float32))
@@ -220,7 +234,11 @@ def run_stage3_epochs(
 
             c_knn = knn_retrieval(fu_b, f_l, y_l, k=min(k, f_l.shape[0]))
             c_pseudo, m_rel = generator.generate(
-                cu_b, c_knn, contour_mask=None, pseudo_label_history=history
+                cu_b,
+                c_knn,
+                contour_mask=None,
+                pseudo_label_history=history,
+                sample_ids=np.arange(start, end),
             )
 
             sample_ids = np.arange(start, end)
@@ -252,18 +270,17 @@ def run_stage3_epochs(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Stage 3 独立伪标签脚本")
-    default_unlabeled_npz = os.path.join(
-        _ROOT,
-        "Stage2-Semantic feature extraction",
-        "stage2_output",
-        "stage2_features.npz",
+    default_unlabeled_npz = find_latest_output_file(
+        os.path.join(_ROOT, 'Stage2_Semantic-feature-extraction'),
+        'stage2_output',
+        'stage2_features.npz',
     )
 
     parser.add_argument(
         "--unlabeled-npz",
         type=str,
         default=default_unlabeled_npz,
-        help="Stage2 unlabeled 输出 .npz（需包含 f_visual/c_heatmap）",
+        help="Stage2 unlabeled 输出 .npz（默认自动读取最新的 stage2_output_<HH-MM_YYMMDD>/stage2_features.npz）",
     )
     parser.add_argument(
         "--labeled-npz",
@@ -292,8 +309,8 @@ def main() -> None:
     parser.add_argument(
         "--labeled-fraction",
         type=float,
-        default=None,
-        help="例如 0.1 表示从 CUB train 中随机选 10%% 作有标签（需 --cub-root），其余作 Stage3 的 unlabeled 查询集",
+        default=0.1,
+        help="默认 0.1。表示从 CUB train 中随机选 10%% 作有标签（需 --cub-root 或使用默认 CUB 路径）；若提供手工 labeled 输入则忽略该参数",
     )
     parser.add_argument(
         "--split-seed",
@@ -316,22 +333,19 @@ def main() -> None:
         "--out",
         type=str,
         default=None,
-        help="输出 .npz 路径，默认 Stage3_Pseudo-label/stage3_output/stage3_pseudo_labels.npz",
+        help="输出 .npz 路径；未提供时默认写入 Stage3_Pseudo-label/stage3_output_<HH-MM_YYMMDD>/stage3_pseudo_labels.npz",
     )
     args = parser.parse_args()
-
-    use_cub_split = args.labeled_fraction is not None
-    if use_cub_split and args.cub_root is None:
-        args.cub_root = os.path.join(_ROOT, "Data", "CUB_200_2011")
-        print(f"未指定 --cub-root，使用默认: {args.cub_root}")
 
     manual_labeled = bool(args.labeled_features_npy and args.labeled_labels_npy) or bool(
         args.labeled_npz
     )
-    if use_cub_split and manual_labeled:
-        raise ValueError(
-            "请勿同时使用 --labeled-fraction 与 --labeled-features-npy/--labeled-labels-npy/--labeled-npz"
-        )
+    use_cub_split = (args.labeled_fraction is not None) and (not manual_labeled)
+    if use_cub_split and args.cub_root is None:
+        args.cub_root = os.path.join(_ROOT, "Data", "CUB_200_2011")
+        print(f"未指定 --cub-root，使用默认: {args.cub_root}")
+    elif manual_labeled and args.labeled_fraction is not None:
+        print("检测到手工 labeled 输入，忽略 --labeled-fraction，直接使用提供的 labeled 参考。")
 
     if args.alpha < 0.0 or args.alpha > 1.0:
         raise ValueError("--alpha 必须在 [0, 1] 范围内")
@@ -364,7 +378,8 @@ def main() -> None:
         )
         print(
             f"CUB 划分: labeled={f_l.shape[0]} ({100.0 * f_l.shape[0] / f_full.shape[0]:.2f}%%), "
-            f"unlabeled={f_u.shape[0]}, cub_train_N={gt_meta.get('num_train', f_full.shape[0])}"
+            f"unlabeled={f_u.shape[0]}, cub_train_N={gt_meta.get('num_train', f_full.shape[0])}; "
+            "labeled 采样与 Stage1 保持一致"
         )
     else:
         f_u, c_u = f_full, c_full
@@ -393,12 +408,14 @@ def main() -> None:
         outputs["labeled_row_indices"] = labeled_idx_np.astype(np.int64)
         outputs["unlabeled_row_indices"] = unlabeled_idx_np.astype(np.int64)
 
-    default_out = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "stage3_output",
-        "stage3_pseudo_labels.npz",
-    )
-    out_path = os.path.abspath(args.out or default_out)
+    if args.out:
+        out_path = os.path.abspath(args.out)
+    else:
+        out_dir = resolve_default_output_dir(
+            os.path.dirname(os.path.abspath(__file__)),
+            'stage3_output',
+        )
+        out_path = os.path.join(out_dir, 'stage3_pseudo_labels.npz')
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     np.savez_compressed(out_path, **outputs)
 

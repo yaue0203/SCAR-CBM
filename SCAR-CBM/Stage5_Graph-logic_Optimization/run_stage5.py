@@ -32,6 +32,7 @@ for p in (_ROOT, _STAGE5):
 from core_modules import LabeledDataset, UnlabeledDataset
 from network_architecture import CompleteModel
 from stage5_framework import ConceptualSSLFramework, create_example_data
+from stage_output_utils import resolve_default_output_dir
 
 
 def set_seed(seed: int) -> None:
@@ -114,8 +115,8 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="",
-        help="若设置，将训练历史摘要写入该目录下的 stage5_training_summary.json",
+        default=None,
+        help="训练历史摘要输出目录；未提供时默认写入 Stage5_Graph-logic_Optimization/stage5_output_<HH-MM_YYMMDD>/",
     )
     args = parser.parse_args()
 
@@ -166,9 +167,14 @@ def main() -> None:
         contour_mask=data_dict["contour_mask"],
     )
 
-    if args.output_dir:
-        os.makedirs(args.output_dir, exist_ok=True)
-        out_path = os.path.join(args.output_dir, "stage5_training_summary.json")
+    output_dir = resolve_default_output_dir(
+        os.path.dirname(os.path.abspath(__file__)),
+        'stage5_output',
+        args.output_dir,
+    )
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        out_path = os.path.join(output_dir, "stage5_training_summary.json")
         serializable = {k: [float(x) for x in v] for k, v in history.items()}
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(serializable, f, indent=2, ensure_ascii=False)

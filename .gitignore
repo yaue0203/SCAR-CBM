@@ -217,3 +217,18 @@ SCAR-CBM/**/stage*_output/**/*.pt
 SCAR-CBM/**/stage*_output/**/*.pth
 SCAR-CBM/**/stage1_*_output/**/*.pt
 SCAR-CBM/**/stage1_*_output/**/*.npy
+
+# Stage1 产出整目录（含 meta/json/csv/viz 等，可再生成）
+SCAR-CBM/**/stage1_*_output/
+
+# Stage3 产出目录
+SCAR-CBM/**/stage3_output/
+
+# Stage5：默认输出目录与 stage5_output_* 实验子目录
+SCAR-CBM/**/stage5_output/
+SCAR-CBM/**/stage5_output_*/
+
+# 临时对比与本地可视化输出
+SCAR-CBM/tmp_compare_*/
+SCAR-CBM/viz_cub_spatial_overlay/
+SCAR-CBM/viz_modified_heatmap/

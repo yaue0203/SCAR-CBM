@@ -18,7 +18,7 @@
 说明:
   - input-npy 支持 [N, C, H, W] 或 [N, H, W, C]（自动转成 NCHW）
   - 若不传 --input-npy，脚本默认优先读取 Data/CUB_200_2011；不存在时回退为 1 个随机样本自检
-  - 输出为 .npz，包含 f_visual / c_heatmap / c_global / c_local / h_aligned / c_graph
+  - 输出为 .npz，包含 f_visual / c_heatmap / spatial_concept_heatmap / c_global / c_local / h_aligned / c_graph
 """
 from __future__ import annotations
 
@@ -38,6 +38,7 @@ if _ROOT not in sys.path:
 
 from network_architecture import CompleteModel
 from train_framework import ConceptualSSLFramework
+from stage_output_utils import find_latest_output_dir, resolve_default_output_dir
 
 
 def resolve_adj_path(adj_path: str | None, stage1_out: str) -> str:
@@ -218,6 +219,7 @@ def extract_stage2_features(
         "h_aligned",
         "c_local",
         "c_heatmap",
+        "spatial_concept_heatmap",
         "c_graph",
     ]
     collector: Dict[str, List[torch.Tensor]] = {k: [] for k in keys}
@@ -242,7 +244,9 @@ def extract_stage2_features(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Stage 2 独立特征提取脚本")
-    default_stage1_out = os.path.join(_ROOT, "Stage1", "stage1_cub_output")
+    default_stage1_out = find_latest_output_dir(
+        os.path.join(_ROOT, 'Stage1'), 'stage1_cub_output'
+    )
     default_cub_root = os.path.join(_ROOT, "Data", "CUB_200_2011")
     parser.add_argument(
         "--adj-path",
@@ -254,7 +258,7 @@ def main() -> None:
         "--stage1-out",
         type=str,
         default=default_stage1_out,
-        help="Stage1 输出目录（用于自动识别邻接矩阵文件）",
+        help="Stage1 输出目录（默认自动读取最新的 stage1_cub_output_<HH-MM_YYMMDD>）",
     )
     parser.add_argument(
         "--input-npy",
@@ -313,7 +317,7 @@ def main() -> None:
         "--out",
         type=str,
         default=None,
-        help="输出 .npz 路径，默认 Stage2-Semantic feature extraction/stage2_output/stage2_features.npz",
+        help="输出 .npz 路径；未提供时默认写入 Stage2_Semantic-feature-extraction/stage2_output_<HH-MM_YYMMDD>/stage2_features.npz",
     )
     args = parser.parse_args()
 
@@ -384,12 +388,14 @@ def main() -> None:
         batch_size=args.batch_size,
     )
 
-    default_out = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "stage2_output",
-        "stage2_features.npz",
-    )
-    out_path = os.path.abspath(args.out or default_out)
+    if args.out:
+        out_path = os.path.abspath(args.out)
+    else:
+        out_dir = resolve_default_output_dir(
+            os.path.dirname(os.path.abspath(__file__)),
+            'stage2_output',
+        )
+        out_path = os.path.join(out_dir, 'stage2_features.npz')
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     np.savez_compressed(out_path, **outputs)
 

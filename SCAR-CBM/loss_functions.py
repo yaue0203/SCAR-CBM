@@ -47,7 +47,11 @@ class AlignmentLoss(nn.Module):
             bce_loss = bce_loss * sample_weights
         
         if self.reduction == 'mean':
-            return bce_loss.sum() / (m_rel.sum() + 1e-8)
+            if sample_weights is not None:
+                denom = (m_rel * sample_weights).sum() + 1e-8
+            else:
+                denom = m_rel.sum() + 1e-8
+            return bce_loss.sum() / denom
         else:
             return bce_loss.sum()
 
@@ -102,26 +106,39 @@ class GeometricConstraintLoss(nn.Module):
         约束：背景区域（contour_mask=1）的热力图应该为0
         
         Args:
-            c_heatmap: 概念热力图 [B, num_concepts]
-            contour_mask: 物理轮廓掩码 [B, 1, H, W]，1表示背景，0表示前景
+            c_heatmap: 概念热力图，支持 [B, num_concepts] 或 [B, num_concepts, H, W]
+            contour_mask: 物理轮廓掩码 [B, 1, H, W]，1表示前景，0表示背景
         
         Returns:
             loss: 标量损失
         """
-        # 如果contour_mask不是正确的维度，进行调整
-        if contour_mask.dim() == 4:
-            b = c_heatmap.shape[0]
+        if c_heatmap.dim() == 4:
+            b, _, h, w = c_heatmap.shape
+            if contour_mask.dim() != 4:
+                raise ValueError("空间几何约束要求 contour_mask 为 [B,1,H,W] 或 [1,1,H,W]")
             if contour_mask.shape[0] == 1 and b > 1:
                 contour_mask = contour_mask.expand(b, -1, -1, -1)
-            contour_mask_pooled = F.adaptive_avg_pool2d(contour_mask, output_size=1)
-            contour_mask_pooled = contour_mask_pooled.view(contour_mask.shape[0])
+            if contour_mask.shape[-2:] != (h, w):
+                contour_mask = F.interpolate(
+                    contour_mask.float(), size=(h, w), mode="nearest"
+                )
+            background_loss = (c_heatmap * (1.0 - contour_mask.float())) ** 2
         else:
-            contour_mask_pooled = contour_mask  # [B]
-        
-        # 在背景区域应该为0
-        background_loss = (c_heatmap * contour_mask_pooled.unsqueeze(1)) ** 2
+            if contour_mask.dim() == 4:
+                b = c_heatmap.shape[0]
+                if contour_mask.shape[0] == 1 and b > 1:
+                    contour_mask = contour_mask.expand(b, -1, -1, -1)
+                contour_mask_pooled = F.adaptive_avg_pool2d(contour_mask, output_size=1)
+                contour_mask_pooled = contour_mask_pooled.view(contour_mask.shape[0])
+            else:
+                contour_mask_pooled = contour_mask
+            background_loss = (c_heatmap * (1.0 - contour_mask_pooled.unsqueeze(1))) ** 2
         
         if self.reduction == 'mean':
+            if c_heatmap.dim() == 4:
+                mask = (1.0 - contour_mask.float())
+                denom = mask.sum() * c_heatmap.shape[1] + 1e-8
+                return background_loss.sum() / denom
             return background_loss.mean()
         else:
             return background_loss.sum()
@@ -158,7 +175,7 @@ class GraphRegularizationLoss(nn.Module):
 
 
 class ContrastiveLoss(nn.Module):
-    """排他性对比损失（拉远易混淆概念）"""
+    """排他性对比损失（InfoNCE 形式，使用负样本队列）"""
     
     def __init__(self, temperature: float = 0.07, reduction: str = 'mean'):
         super().__init__()
@@ -166,55 +183,37 @@ class ContrastiveLoss(nn.Module):
         self.reduction = reduction
     
     def forward(self,
-                c_heatmap: torch.Tensor,
-                confusable_pairs: Tuple[torch.Tensor, torch.Tensor],
+                anchor_features: torch.Tensor,
+                positive_features: torch.Tensor,
                 negative_features: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         L_contrast = -log(exp(sim_pos) / Σ exp(sim_neg))
         
         Args:
-            c_heatmap: 概念热力图预测 [B, num_concepts]
-            confusable_pairs: (positive_idx, negative_idx) 混淆概念对
-            negative_features: 负样本特征队列 [K, num_concepts]
+            anchor_features: 当前样本特征 [B, D]
+            positive_features: 对应正样本特征 [B, D]
+            negative_features: 负样本队列 [K, D]
         
         Returns:
             loss: 标量损失
         """
-        pos_idx, neg_idx = confusable_pairs
-        
-        # 获取正和负样本的热力图
-        c_pos = c_heatmap[:, pos_idx]  # [B, P] 或 [B]（单索引时）
-        c_neg = c_heatmap[:, neg_idx]
-        if c_pos.ndim == 1:
-            c_pos = c_pos.unsqueeze(-1)
-        if c_neg.ndim == 1:
-            c_neg = c_neg.unsqueeze(-1)
-        B, P = c_pos.shape
-        N = c_neg.shape[1]
+        if negative_features is None or negative_features.numel() == 0:
+            return anchor_features.new_zeros(())
 
-        cp = F.normalize(c_pos, p=2, dim=-1)
-        cn = F.normalize(c_neg, p=2, dim=-1)
+        z_anchor = F.normalize(anchor_features, p=2, dim=1)
+        z_positive = F.normalize(positive_features, p=2, dim=1)
+        z_negative = F.normalize(
+            negative_features.to(device=anchor_features.device, dtype=anchor_features.dtype),
+            p=2,
+            dim=1,
+        )
 
-        # 正组内凝聚度（排除自相似对角）；单概念时退化为 1，不参与错误对比
-        if P > 1:
-            # [B,P,1] @ [B,1,P] -> 每样本概念两两余弦
-            sim_pp = torch.matmul(cp.unsqueeze(2), cp.unsqueeze(1))
-            eye = torch.eye(P, device=cp.device, dtype=torch.bool).unsqueeze(0)
-            sim_pos = (sim_pp.masked_fill(eye, 0.0)).sum(dim=(1, 2)) / (P * (P - 1))
-        else:
-            sim_pos = torch.ones(B, device=cp.device, dtype=cp.dtype)
+        sim_pos = torch.sum(z_anchor * z_positive, dim=1, keepdim=True)
+        sim_neg = torch.matmul(z_anchor, z_negative.t())
 
-        # 正负组间可分离性：组间余弦均值越高越易混淆，作为“负”项
-        sim_cross = torch.matmul(cp.unsqueeze(2), cn.unsqueeze(1))
-        sim_neg = sim_cross.mean(dim=(1, 2))
-        
-        # 对比损失
-        logits = torch.stack([sim_pos, sim_neg], dim=1) / self.temperature  # [B, 2]
+        logits = torch.cat([sim_pos, sim_neg], dim=1) / self.temperature
         labels = torch.zeros(logits.shape[0], dtype=torch.long, device=logits.device)
-        
-        contrast_loss = F.cross_entropy(logits, labels, reduction=self.reduction)
-        
-        return contrast_loss
+        return F.cross_entropy(logits, labels, reduction=self.reduction)
 
 
 class NT_Xent_Loss(nn.Module):
@@ -267,15 +266,111 @@ class NT_Xent_Loss(nn.Module):
         return loss
 
 
+class SpatialConceptAlignmentLoss(nn.Module):
+    """
+    监督图像空间热力图与多标签概念一致。
+
+    相比仅做 top-k BCE，这里额外加入：
+    - 负概念 hardest-region 抑制，减少整图泛亮
+    - 正概念峰谷分离，鼓励响应集中到少量真正相关区域
+    """
+
+    def __init__(
+        self,
+        reduction: str = "mean",
+        eps: float = 1e-6,
+        topk_ratio: float = 0.1,
+        negative_weight: float = 0.35,
+        separation_weight: float = 0.15,
+        separation_margin: float = 0.25,
+    ):
+        super().__init__()
+        self.reduction = reduction
+        self.eps = eps
+        self.topk_ratio = float(topk_ratio)
+        self.negative_weight = float(negative_weight)
+        self.separation_weight = float(separation_weight)
+        self.separation_margin = float(separation_margin)
+
+    def forward(
+        self,
+        spatial_concept_heatmap: torch.Tensor,
+        y_true: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Args:
+            spatial_concept_heatmap: [B, num_concepts, H, W]，每概念的空间概率图
+            y_true: [B, num_concepts]，0~1 多标签
+        """
+        if spatial_concept_heatmap.dim() != 4:
+            raise ValueError(
+                "SpatialConceptAlignmentLoss 期望 spatial_concept_heatmap 为 [B,C,H,W]"
+            )
+        b, c, h, w = spatial_concept_heatmap.shape
+        flat = spatial_concept_heatmap.view(b, c, h * w)
+        y_true = y_true.float()
+
+        k = max(1, int(round(self.topk_ratio * h * w)))
+        topk_vals = flat.topk(k, dim=-1).values
+        pooled_topk = topk_vals.mean(dim=-1).clamp(self.eps, 1.0 - self.eps)
+        loss_presence = F.binary_cross_entropy(pooled_topk, y_true, reduction='none')
+
+        # 对缺失概念，直接压制其 hardest region 的响应。
+        loss_negative = ((1.0 - y_true) * topk_vals.pow(2).mean(dim=-1))
+
+        # 对存在概念，拉开高响应区域与低响应区域的差距，减少大面积泛亮。
+        bottomk_vals = torch.topk(flat, k, dim=-1, largest=False).values
+        pooled_bottomk = bottomk_vals.mean(dim=-1)
+        separation_gap = pooled_topk - pooled_bottomk
+        loss_separation = y_true * F.relu(self.separation_margin - separation_gap)
+
+        total = (
+            loss_presence
+            + self.negative_weight * loss_negative
+            + self.separation_weight * loss_separation
+        )
+        if self.reduction == 'sum':
+            return total.sum()
+        return total.mean()
+
+
+class SpatialConsistencyLoss(nn.Module):
+    """约束 weak/strong 增强下的空间热力图保持稳定。"""
+
+    def __init__(self, reduction: str = "mean"):
+        super().__init__()
+        self.reduction = reduction
+
+    def forward(
+        self,
+        heatmap_weak: torch.Tensor,
+        heatmap_strong: torch.Tensor,
+        m_rel: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        if heatmap_weak.shape != heatmap_strong.shape:
+            raise ValueError(
+                f"空间一致性损失要求形状一致，得到 {tuple(heatmap_weak.shape)} vs {tuple(heatmap_strong.shape)}"
+            )
+        per_sample = F.mse_loss(heatmap_weak, heatmap_strong, reduction="none")
+        per_sample = per_sample.mean(dim=(1, 2, 3))
+        if m_rel is not None:
+            weights = 1.0 - m_rel.float()
+            denom = weights.sum() + 1e-8
+            return (per_sample * weights).sum() / denom
+        if self.reduction == "mean":
+            return per_sample.mean()
+        return per_sample.sum()
+
+
 class MultiTaskLoss(nn.Module):
     """多任务联合损失"""
     
     def __init__(self,
                  lambda1: float = 0.5,
-                 lambda2: float = 0.3,
-                 lambda3: float = 0.2,
-                 lambda4: float = 0.1,
-                 lambda5: float = 0.1):
+                 lambda2: float = 0.4,
+                 lambda3: float = 2.5,
+                 lambda4: float = 0.08,
+                 lambda5: float = 0.02):
         super().__init__()
         # 归一化相对权重，使 λ1…λ5 之和为 1（保持比例不变）
         total = lambda1 + lambda2 + lambda3 + lambda4 + lambda5
@@ -293,6 +388,7 @@ class MultiTaskLoss(nn.Module):
         self.loss_geometric = GeometricConstraintLoss()
         self.loss_graph = GraphRegularizationLoss()
         self.loss_contrast = ContrastiveLoss()
+        self.loss_spatial_consistency = SpatialConsistencyLoss()
     
     def forward(self,
                 # 监督部分
@@ -307,8 +403,10 @@ class MultiTaskLoss(nn.Module):
                 # 几何和图部分
                 c_graph: Optional[torch.Tensor] = None,
                 contour_mask: Optional[torch.Tensor] = None,
+                spatial_heatmap: Optional[torch.Tensor] = None,
+                spatial_heatmap_strong: Optional[torch.Tensor] = None,
                 # 对比学习部分
-                confusable_pairs: Optional[Tuple] = None,
+                negative_features: Optional[torch.Tensor] = None,
                 sample_weights: Optional[torch.Tensor] = None) -> dict:
         """
         计算多任务联合损失
@@ -345,21 +443,36 @@ class MultiTaskLoss(nn.Module):
         
         # L_geo: 几何约束损失
         if contour_mask is not None:
-            loss_geo = self.loss_geometric(c_heatmap_unlabeled, contour_mask)
+            geo_target = spatial_heatmap if spatial_heatmap is not None else c_heatmap_unlabeled
+            loss_geo = self.loss_geometric(geo_target, contour_mask)
             losses['L_geo'] = loss_geo
             total_loss = total_loss + self.lambda3 * loss_geo
+        else:
+            losses['L_geo'] = c_heatmap_unlabeled.new_zeros(())
+
+        if spatial_heatmap is not None and spatial_heatmap_strong is not None:
+            loss_spatial_consistency = self.loss_spatial_consistency(
+                spatial_heatmap, spatial_heatmap_strong, m_rel
+            )
+            losses['L_spatial_consistency'] = loss_spatial_consistency
+        else:
+            losses['L_spatial_consistency'] = c_heatmap_unlabeled.new_zeros(())
         
         # L_graph: 图正则化损失
         if c_graph is not None:
             loss_graph = self.loss_graph(c_heatmap_unlabeled, c_graph)
             losses['L_graph'] = loss_graph
             total_loss = total_loss + self.lambda4 * loss_graph
+        else:
+            losses['L_graph'] = c_heatmap_unlabeled.new_zeros(())
         
         # L_contrast: 对比损失
-        if confusable_pairs is not None:
-            loss_contrast = self.loss_contrast(c_heatmap_unlabeled, confusable_pairs)
+        if negative_features is not None:
+            loss_contrast = self.loss_contrast(f_weak, f_strong, negative_features)
             losses['L_contrast'] = loss_contrast
             total_loss = total_loss + self.lambda5 * loss_contrast
+        else:
+            losses['L_contrast'] = c_heatmap_unlabeled.new_zeros(())
         
         losses['L_total'] = total_loss
         
