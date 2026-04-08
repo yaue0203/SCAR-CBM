@@ -206,6 +206,8 @@ class ConceptSpatialAlignment(nn.Module):
             nn.GroupNorm(8, feature_dim),
         )
         self.condition_gate = nn.Linear(num_concepts * 2, num_concepts)
+        self.border_common_mode_scale = nn.Parameter(torch.tensor(0.35))
+        self.border_ratio = 0.12
         nn.init.xavier_uniform_(self.pos_embeddings)
         nn.init.xavier_uniform_(self.neg_embeddings)
         nn.init.kaiming_normal_(self.feature_proj[0].weight, nonlinearity="linear")
@@ -252,6 +254,16 @@ class ConceptSpatialAlignment(nn.Module):
 
         scores = torch.einsum('bnd,bkd->bnk', spatial_proj, concept_embeddings)
         scores = scores.transpose(1, 2).view(b, self.num_concepts, h, w)
+
+        bw = max(1, int(round(min(h, w) * self.border_ratio)))
+        border_mask = scores.new_zeros((1, 1, h, w))
+        border_mask[:, :, :bw, :] = 1.0
+        border_mask[:, :, -bw:, :] = 1.0
+        border_mask[:, :, :, :bw] = 1.0
+        border_mask[:, :, :, -bw:] = 1.0
+        common_mode = scores.mean(dim=1, keepdim=True)
+        scores = scores - self.border_common_mode_scale.clamp(min=0.0, max=1.0) * common_mode * border_mask
+
         scores = scores * self.temperature.clamp(min=0.1, max=10.0)
         return torch.sigmoid(scores)
 

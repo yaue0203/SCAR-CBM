@@ -31,6 +31,7 @@ from core_modules import LabeledDataset, UnlabeledDataset
 from loss_functions import (
     GeometricConstraintLoss,
     SpatialConceptAlignmentLoss,
+    SpatialConceptDiversityLoss,
     SpatialConsistencyLoss,
     SpatialForegroundSeparationLoss,
     SpatialPseudoAlignmentLoss,
@@ -162,7 +163,9 @@ def eval_spatial_val_loss(
     val_loader: DataLoader,
     device: torch.device,
     spatial_align_loss: SpatialConceptAlignmentLoss,
+    spatial_mask_loss: SpatialForegroundSeparationLoss,
     geo_loss_fn: GeometricConstraintLoss,
+    lambda_mask: float,
     lambda_geo: float,
 ) -> float:
     model.eval()
@@ -175,6 +178,8 @@ def eval_spatial_val_loss(
             mask = batch[4].to(device) if len(batch) > 4 else None
             out = forward_spatial_only(model, x)
             loss = spatial_align_loss(out['spatial_concept_heatmap'], y)
+            if mask is not None and lambda_mask > 0.0:
+                loss = loss + lambda_mask * spatial_mask_loss(out['spatial_concept_heatmap'], mask, y)
             if mask is not None and lambda_geo > 0.0:
                 loss = loss + lambda_geo * geo_loss_fn(out['spatial_concept_heatmap'], mask)
             total += loss.item() * x.shape[0]
@@ -213,6 +218,7 @@ def main() -> None:
     parser.add_argument('--lambda-unlabeled', type=float, default=0.5)
     parser.add_argument('--lambda-geo', type=float, default=0.3)
     parser.add_argument('--lambda-mask', type=float, default=0.2)
+    parser.add_argument('--lambda-diversity', type=float, default=0.08)
     parser.add_argument('--lambda-consistency', type=float, default=0.1)
     parser.add_argument('--min-c-acc', type=float, default=0.90)
     parser.add_argument('--min-y-acc', type=float, default=0.90)
@@ -305,6 +311,7 @@ def main() -> None:
     spatial_pseudo_loss = SpatialPseudoAlignmentLoss()
     spatial_consistency_loss = SpatialConsistencyLoss()
     spatial_mask_loss = SpatialForegroundSeparationLoss()
+    spatial_diversity_loss = SpatialConceptDiversityLoss()
     geo_loss_fn = GeometricConstraintLoss()
 
     baseline_metrics = eval_main_metrics(model, val_loader, device)
@@ -345,6 +352,8 @@ def main() -> None:
             optimizer.zero_grad()
             out = forward_spatial_only(model, x)
             loss = args.lambda_labeled * spatial_align_loss(out['spatial_concept_heatmap'], y)
+            if args.lambda_diversity > 0.0:
+                loss = loss + args.lambda_diversity * spatial_diversity_loss(out['spatial_concept_heatmap'], y)
             if mask is not None and args.lambda_mask > 0.0:
                 loss = loss + args.lambda_mask * spatial_mask_loss(out['spatial_concept_heatmap'], mask, y)
             if mask is not None and args.lambda_geo > 0.0:
@@ -376,6 +385,11 @@ def main() -> None:
                     out_s['spatial_concept_heatmap'],
                     None,
                 )
+            if args.lambda_diversity > 0.0:
+                loss = loss + args.lambda_diversity * spatial_diversity_loss(
+                    out_w['spatial_concept_heatmap'],
+                    teacher_prob,
+                )
             if mask is not None and args.lambda_mask > 0.0:
                 loss = loss + args.lambda_mask * spatial_mask_loss(
                     out_w['spatial_concept_heatmap'],
@@ -391,7 +405,16 @@ def main() -> None:
             num_batches += 1
 
         main_metrics = eval_main_metrics(model, val_loader, device)
-        spatial_val = eval_spatial_val_loss(model, val_loader, device, spatial_align_loss, geo_loss_fn, args.lambda_geo)
+        spatial_val = eval_spatial_val_loss(
+            model,
+            val_loader,
+            device,
+            spatial_align_loss,
+            spatial_mask_loss,
+            geo_loss_fn,
+            args.lambda_mask,
+            args.lambda_geo,
+        )
         epoch_summary = {
             'epoch': epoch,
             'L_spatial_labeled': epoch_losses['L_spatial_labeled'] / max(num_batches, 1),

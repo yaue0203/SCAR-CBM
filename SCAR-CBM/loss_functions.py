@@ -374,17 +374,21 @@ class SpatialForegroundSeparationLoss(nn.Module):
         reduction: str = "mean",
         foreground_floor: float = 0.35,
         separation_margin: float = 0.12,
+        foreground_ratio_floor: float = 0.72,
         border_ratio: float = 0.12,
         foreground_weight: float = 0.5,
-        border_weight: float = 0.35,
+        ratio_weight: float = 0.8,
+        border_weight: float = 0.5,
         eps: float = 1e-6,
     ):
         super().__init__()
         self.reduction = reduction
         self.foreground_floor = float(foreground_floor)
         self.separation_margin = float(separation_margin)
+        self.foreground_ratio_floor = float(foreground_ratio_floor)
         self.border_ratio = float(border_ratio)
         self.foreground_weight = float(foreground_weight)
+        self.ratio_weight = float(ratio_weight)
         self.border_weight = float(border_weight)
         self.eps = float(eps)
 
@@ -426,11 +430,16 @@ class SpatialForegroundSeparationLoss(nn.Module):
         fg_area = mask.sum(dim=(2, 3)).clamp_min(self.eps)
         bg_area = bg_mask.sum(dim=(2, 3)).clamp_min(self.eps)
 
-        fg_mean = (spatial_heatmap * mask).sum(dim=(2, 3)) / fg_area
-        bg_mean = (spatial_heatmap * bg_mask).sum(dim=(2, 3)) / bg_area
+        fg_mass = (spatial_heatmap * mask).sum(dim=(2, 3))
+        bg_mass = (spatial_heatmap * bg_mask).sum(dim=(2, 3))
+        total_mass = (fg_mass + bg_mass).clamp_min(self.eps)
+        fg_mean = fg_mass / fg_area
+        bg_mean = bg_mass / bg_area
+        fg_ratio = fg_mass / total_mass
 
         loss_foreground = concept_weights * F.relu(self.foreground_floor - fg_mean)
         loss_separation = concept_weights * F.relu(self.separation_margin - (fg_mean - bg_mean))
+        loss_ratio = concept_weights * F.relu(self.foreground_ratio_floor - fg_ratio)
 
         border_mask = self._border_mask(h, w, spatial_heatmap.device, spatial_heatmap.dtype)
         border_bg = (border_mask * bg_mask).clamp(0.0, 1.0)
@@ -438,11 +447,55 @@ class SpatialForegroundSeparationLoss(nn.Module):
         border_mean = (spatial_heatmap * border_bg).sum(dim=(2, 3)) / border_area
         loss_border = concept_weights * border_mean
 
-        total = loss_separation + self.foreground_weight * loss_foreground + self.border_weight * loss_border
+        total = (
+            loss_separation
+            + self.foreground_weight * loss_foreground
+            + self.ratio_weight * loss_ratio
+            + self.border_weight * loss_border
+        )
         if self.reduction == 'sum':
             return total.sum()
         denom = concept_weights.sum().clamp_min(self.eps)
         return total.sum() / denom
+
+
+class SpatialConceptDiversityLoss(nn.Module):
+    """鼓励同一张图内不同概念的热力图不要坍缩成同一个模板。"""
+
+    def __init__(self, max_active: int = 6, eps: float = 1e-6):
+        super().__init__()
+        self.max_active = int(max_active)
+        self.eps = float(eps)
+
+    def forward(self, spatial_heatmap: torch.Tensor, concept_targets: torch.Tensor) -> torch.Tensor:
+        if spatial_heatmap.dim() != 4:
+            raise ValueError('SpatialConceptDiversityLoss 期望 spatial_heatmap 为 [B,C,H,W]')
+        if concept_targets.dim() != 2:
+            raise ValueError('SpatialConceptDiversityLoss 期望 concept_targets 为 [B,C]')
+
+        b, c, h, w = spatial_heatmap.shape
+        flat = spatial_heatmap.view(b, c, h * w)
+        losses = []
+        for i in range(b):
+            weights = concept_targets[i].float().clamp(0.0, 1.0)
+            active = torch.nonzero(weights > 0.5, as_tuple=False).squeeze(1)
+            if active.numel() < 2:
+                continue
+            if active.numel() > self.max_active:
+                top = torch.topk(weights[active], self.max_active).indices
+                active = active[top]
+            feats = flat[i, active]
+            feats = feats - feats.mean(dim=1, keepdim=True)
+            feats = F.normalize(feats, dim=1, eps=self.eps)
+            sim = feats @ feats.t()
+            n = sim.shape[0]
+            if n < 2:
+                continue
+            off_diag = sim[~torch.eye(n, dtype=torch.bool, device=sim.device)]
+            losses.append(off_diag.pow(2).mean())
+        if not losses:
+            return spatial_heatmap.new_zeros(())
+        return torch.stack(losses).mean()
 
 
 class SpatialPseudoAlignmentLoss(nn.Module):
