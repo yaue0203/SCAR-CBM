@@ -230,5 +230,15 @@ SCAR-CBM/**/stage5_output_*/
 
 # 临时对比与本地可视化输出
 SCAR-CBM/tmp_compare_*/
+SCAR-CBM/tmp_viz_*/
 SCAR-CBM/viz_cub_spatial_overlay/
 SCAR-CBM/viz_modified_heatmap/
+
+# Stage1 可选对照实验输出（非标准 stage1_*_output 命名）
+SCAR-CBM/**/stage1_cub_output_optcheck_*/
+
+# Stage5 spatial-align-only 训练与探针产出
+SCAR-CBM/**/stage5_align_only_*/
+
+# SCAR-CBM 根目录本地打包备份
+SCAR-CBM/*.zip

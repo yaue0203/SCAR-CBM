@@ -24,36 +24,9 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
+from stage1_data_utils import complement_indices, parse_ratio_arg, sample_labeled_rows
 from stage1_hypergraph import build_concept_hypergraph
 from stage_output_utils import resolve_default_output_dir
-
-
-def parse_ratio_arg(value: str) -> float:
-    text = str(value).strip()
-    if text.endswith('%'):
-        ratio = float(text[:-1]) / 100.0
-    else:
-        ratio = float(text)
-    if not (0.0 < ratio <= 1.0):
-        raise argparse.ArgumentTypeError(
-            f'比例必须在 (0, 1] 范围内，当前为 {value}'
-        )
-    return ratio
-
-
-def sample_labeled_rows(
-    concept_ids: np.ndarray,
-    ratio: float,
-    seed: int,
-) -> tuple[np.ndarray, np.ndarray]:
-    n_samples = int(concept_ids.shape[0])
-    n_selected = min(n_samples, max(1, int(np.ceil(n_samples * ratio))))
-    if n_selected == n_samples:
-        indices = np.arange(n_samples, dtype=np.int64)
-    else:
-        rng = np.random.default_rng(seed)
-        indices = np.sort(rng.choice(n_samples, size=n_selected, replace=False))
-    return concept_ids[indices], indices
 
 
 def main() -> None:
@@ -106,6 +79,9 @@ def main() -> None:
         ratio=args.labeled_ratio,
         seed=args.seed,
     )
+    unlabeled_indices = complement_indices(len(concept_ids), selected_indices)
+    np.save(os.path.join(out_dir, 'labeled_row_indices.npy'), selected_indices.astype(np.int64))
+    np.save(os.path.join(out_dir, 'unlabeled_row_indices.npy'), unlabeled_indices.astype(np.int64))
 
     hg = build_concept_hypergraph(
         concept_ids_for_graph,
@@ -135,9 +111,11 @@ def main() -> None:
         f'  使用有标签样本: {len(selected_indices)}/{len(concept_ids)} '
         f'(ratio={args.labeled_ratio:.4f}, seed={args.seed})'
     )
+    print(f'  剩余未标注样本: {len(unlabeled_indices)}')
     print(f'  节点: {hg.hypergraph.number_of_nodes()}, 边: {hg.hypergraph.number_of_edges()}')
     print(f'  邻接矩阵: {adj_path}')
     print(f'  共现矩阵: {co_path}')
+    print(f'  行索引: {os.path.join(out_dir, "labeled_row_indices.npy")} | {os.path.join(out_dir, "unlabeled_row_indices.npy")}')
     print(f'  超图对象: {pkl_path}  →  fit(..., prebuilt_hypergraph=pickle.load(open(...)))')
 
 

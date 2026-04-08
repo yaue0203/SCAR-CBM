@@ -121,7 +121,7 @@ def upsample_heatmaps(
     if heatmaps.ndim != 3:
         raise ValueError(f"期望 [K,h,w]，得到 {tuple(heatmaps.shape)}")
     x = heatmaps.unsqueeze(0).float()
-    x = F.interpolate(x, size=(out_h, out_w), mode="bilinear", align_corners=False)
+    x = F.interpolate(x, size=(out_h, out_w), mode="bilinear", align_corners=True)
     return x.squeeze(0)
 
 
@@ -229,7 +229,8 @@ def save_panel(
         r, c = divmod(i, ncols)
         ax = axes[r, c]
         hm = hmaps[i]
-        hm = (hm - hm.min()) / (hm.max() - hm.min() + 1e-8)
+        p_lo, p_hi = np.percentile(hm, [2, 98])
+        hm = np.clip((hm - p_lo) / (p_hi - p_lo + 1e-8), 0.0, 1.0)
         blended = overlay_rgb(img, hm, cmap_name=cmap_name, alpha=alpha)
         ax.imshow(blended)
         ax.set_title(f"concept {cid}")
@@ -305,7 +306,8 @@ def save_compare_panel(
         for j, (hmaps, label) in enumerate(((hmaps_a, label_a), (hmaps_b, label_b))):
             ax = axes[i, j]
             hm = hmaps[i]
-            hm = (hm - hm.min()) / (hm.max() - hm.min() + 1e-8)
+            p_lo, p_hi = np.percentile(hm, [2, 98])
+            hm = np.clip((hm - p_lo) / (p_hi - p_lo + 1e-8), 0.0, 1.0)
             blended = overlay_rgb(img, hm, cmap_name=cmap_name, alpha=alpha)
             ax.imshow(blended)
             ax.set_title(f"concept {cid} | {label}")

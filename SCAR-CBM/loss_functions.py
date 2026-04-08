@@ -167,7 +167,7 @@ class GraphRegularizationLoss(nn.Module):
             loss: 标量损失
         """
         if c_graph is None:
-            return torch.tensor(0.0, device=c_heatmap.device)
+            return c_heatmap.new_zeros(())
         
         graph_loss = F.mse_loss(c_graph, c_heatmap, reduction=self.reduction)
         
@@ -310,7 +310,11 @@ class SpatialConceptAlignmentLoss(nn.Module):
         flat = spatial_concept_heatmap.view(b, c, h * w)
         y_true = y_true.float()
 
-        k = max(1, int(round(self.topk_ratio * h * w)))
+        h_w = h * w
+        if h_w <= 64:
+            k = max(4, int(round(0.25 * h_w)))
+        else:
+            k = max(1, int(round(self.topk_ratio * h_w)))
         topk_vals = flat.topk(k, dim=-1).values
         pooled_topk = topk_vals.mean(dim=-1).clamp(self.eps, 1.0 - self.eps)
         loss_presence = F.binary_cross_entropy(pooled_topk, y_true, reduction='none')
@@ -362,6 +366,40 @@ class SpatialConsistencyLoss(nn.Module):
         return per_sample.sum()
 
 
+class SpatialPseudoAlignmentLoss(nn.Module):
+    """将空间热力图池化为概念 logits，并与伪标签对齐。"""
+
+    def __init__(self, topk_ratio: float = 0.1, eps: float = 1e-6):
+        super().__init__()
+        self.topk_ratio = float(topk_ratio)
+        self.eps = float(eps)
+        self.base_loss = AlignmentLoss()
+
+    def pool_to_logits(self, spatial_heatmap: torch.Tensor) -> torch.Tensor:
+        if spatial_heatmap.dim() != 4:
+            raise ValueError("SpatialPseudoAlignmentLoss 期望 spatial_heatmap 为 [B,C,H,W]")
+        b, c, h, w = spatial_heatmap.shape
+        flat = spatial_heatmap.view(b, c, h * w)
+        h_w = h * w
+        if h_w <= 64:
+            k = max(4, int(round(0.25 * h_w)))
+        else:
+            k = max(1, int(round(self.topk_ratio * h_w)))
+        pooled = flat.topk(k, dim=-1).values.mean(dim=-1)
+        pooled = pooled.clamp(self.eps, 1.0 - self.eps)
+        return torch.logit(pooled)
+
+    def forward(
+        self,
+        spatial_heatmap: torch.Tensor,
+        c_pseudo: torch.Tensor,
+        m_rel: torch.Tensor,
+        sample_weights: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        pooled_logits = self.pool_to_logits(spatial_heatmap)
+        return self.base_loss(pooled_logits, c_pseudo, m_rel, sample_weights)
+
+
 class MultiTaskLoss(nn.Module):
     """多任务联合损失"""
     
@@ -389,6 +427,7 @@ class MultiTaskLoss(nn.Module):
         self.loss_graph = GraphRegularizationLoss()
         self.loss_contrast = ContrastiveLoss()
         self.loss_spatial_consistency = SpatialConsistencyLoss()
+        self.loss_spatial_pseudo = SpatialPseudoAlignmentLoss()
     
     def forward(self,
                 # 监督部分
@@ -405,6 +444,7 @@ class MultiTaskLoss(nn.Module):
                 contour_mask: Optional[torch.Tensor] = None,
                 spatial_heatmap: Optional[torch.Tensor] = None,
                 spatial_heatmap_strong: Optional[torch.Tensor] = None,
+                spatial_pseudo_weight: float = 0.0,
                 # 对比学习部分
                 negative_features: Optional[torch.Tensor] = None,
                 sample_weights: Optional[torch.Tensor] = None) -> dict:
@@ -457,6 +497,16 @@ class MultiTaskLoss(nn.Module):
             losses['L_spatial_consistency'] = loss_spatial_consistency
         else:
             losses['L_spatial_consistency'] = c_heatmap_unlabeled.new_zeros(())
+
+        if spatial_heatmap is not None:
+            loss_spatial_pseudo = self.loss_spatial_pseudo(
+                spatial_heatmap, c_pseudo, m_rel, sample_weights
+            )
+            losses['L_spatial_pseudo'] = loss_spatial_pseudo
+            if spatial_pseudo_weight > 0.0:
+                total_loss = total_loss + float(spatial_pseudo_weight) * loss_spatial_pseudo
+        else:
+            losses['L_spatial_pseudo'] = c_heatmap_unlabeled.new_zeros(())
         
         # L_graph: 图正则化损失
         if c_graph is not None:

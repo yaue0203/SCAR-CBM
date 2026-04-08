@@ -7,55 +7,97 @@ import torch.nn.functional as F
 from typing import Tuple
 
 
+class BasicResidualBlock(nn.Module):
+    """ResNet-34 风格 basic residual block。"""
+
+    expansion = 1
+
+    def __init__(self, in_channels: int, out_channels: int, stride: int = 1):
+        super().__init__()
+        self.conv1 = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=3,
+            stride=stride,
+            padding=1,
+            bias=False,
+        )
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(
+            out_channels,
+            out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False,
+        )
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.relu = nn.ReLU(inplace=True)
+
+        if stride != 1 or in_channels != out_channels:
+            self.downsample = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm2d(out_channels),
+            )
+        else:
+            self.downsample = nn.Identity()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        identity = self.downsample(x)
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        out = out + identity
+        out = self.relu(out)
+        return out
+
+
 class BaseEncoder(nn.Module):
-    """基础视觉编码器（可替换为ResNet、ViT等）"""
-    
-    def __init__(self, input_dim: int = 3, feature_dim: int = 256, 
-                 hidden_dim: int = 512):
+    """ResNet-34 风格视觉编码器。"""
+
+    def __init__(self, input_dim: int = 3, feature_dim: int = 256, hidden_dim: int = 512):
         super().__init__()
         self.input_dim = input_dim
         self.feature_dim = feature_dim
-        
-        # 简化的CNN编码器结构
-        self.conv1 = nn.Conv2d(input_dim, 64, kernel_size=7, stride=2, padding=3)
+
+        self.conv1 = nn.Conv2d(input_dim, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        
-        # ResNet-like blocks
-        self.layer1 = self._make_layer(64, 64, 3, stride=1)
-        self.layer2 = self._make_layer(64, 128, 4, stride=2)
-        self.layer3 = self._make_layer(128, 256, 6, stride=2)
-        
-        # 全局平均池化后的特征维度
+
+        self.in_channels = 64
+        self.layer1 = self._make_layer(64, blocks=3, stride=1)
+        self.layer2 = self._make_layer(128, blocks=4, stride=2)
+        self.layer3 = self._make_layer(256, blocks=6, stride=2)
+        self.layer4 = self._make_layer(512, blocks=3, stride=2)
+
+        # layer3 保持 14x14，用于更精细的空间对齐。
+        self.spatial_proj = nn.Sequential(
+            nn.Conv2d(256 * BasicResidualBlock.expansion, feature_dim, kernel_size=1, bias=False),
+            nn.BatchNorm2d(feature_dim),
+            nn.ReLU(inplace=True),
+        )
+
         self.global_avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(256, feature_dim)
-    
-    def _make_layer(self, in_channels, out_channels, blocks, stride=1):
-        layers = []
-        # 第一个block可能需要改变维度
-        first_conv_in = in_channels
-        if stride != 1 or in_channels != out_channels:
-            layers.append(nn.Conv2d(in_channels, out_channels, 1, stride=stride))
-            layers.append(nn.BatchNorm2d(out_channels))
-            first_conv_in = out_channels
-        
-        layers.append(nn.Conv2d(first_conv_in, out_channels, 3, stride=1, padding=1))
-        layers.append(nn.BatchNorm2d(out_channels))
-        layers.append(nn.ReLU(inplace=True))
-        
+        self.fc = nn.Linear(512 * BasicResidualBlock.expansion, feature_dim)
+
+    def _make_layer(self, out_channels: int, blocks: int, stride: int = 1) -> nn.Sequential:
+        layers = [BasicResidualBlock(self.in_channels, out_channels, stride=stride)]
+        self.in_channels = out_channels * BasicResidualBlock.expansion
         for _ in range(1, blocks):
-            layers.append(nn.Conv2d(out_channels, out_channels, 3, padding=1))
-            layers.append(nn.BatchNorm2d(out_channels))
-            layers.append(nn.ReLU(inplace=True))
-        
+            layers.append(BasicResidualBlock(self.in_channels, out_channels, stride=1))
         return nn.Sequential(*layers)
-    
+
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         返回两个输出：
         - features: 全局特征 [B, feature_dim]
-        - spatial_features: 空间特征用于注意力 [B, C, H, W]
+        - spatial_features: 空间特征用于注意力 [B, feature_dim, H, W]
         """
         if x.ndim != 4:
             raise ValueError(f"BaseEncoder 期望输入形状 [B,C,H,W]，得到 ndim={x.ndim}")
@@ -63,20 +105,21 @@ class BaseEncoder(nn.Module):
             raise ValueError(
                 f"BaseEncoder 期望通道数 {self.input_dim}，得到 {x.shape[1]}"
             )
+
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
-        
+
         x = self.layer1(x)
         x = self.layer2(x)
-        spatial_features = self.layer3(x)  # 保存空间特征
-        
-        # 全局特征
-        x = self.global_avgpool(spatial_features)
+        x = self.layer3(x)
+        spatial_features = self.spatial_proj(x)  # 14x14, stride=16
+        x = self.layer4(x)
+
+        x = self.global_avgpool(x)
         x = x.flatten(1)
         features = self.fc(x)
-        
         return features, spatial_features
 
 
@@ -154,17 +197,20 @@ class ConceptSpatialAlignment(nn.Module):
         super().__init__()
         self.num_concepts = num_concepts
         self.feature_dim = feature_dim
-        self.temperature = nn.Parameter(torch.tensor(1.0))
+        self.temperature = nn.Parameter(torch.tensor(10.0))
         # num_heads 保留以兼容 CompleteModel 构造参数，本模块不使用多头注意力
         self.pos_embeddings = nn.Parameter(torch.empty(num_concepts, feature_dim))
         self.neg_embeddings = nn.Parameter(torch.empty(num_concepts, feature_dim))
-        self.feature_proj = nn.Conv2d(feature_dim, feature_dim, kernel_size=1, bias=False)
+        self.feature_proj = nn.Sequential(
+            nn.Conv2d(feature_dim, feature_dim, kernel_size=1, bias=False),
+            nn.GroupNorm(8, feature_dim),
+        )
         self.condition_gate = nn.Linear(num_concepts * 2, num_concepts)
         nn.init.xavier_uniform_(self.pos_embeddings)
         nn.init.xavier_uniform_(self.neg_embeddings)
-        nn.init.kaiming_normal_(self.feature_proj.weight, nonlinearity="linear")
-        nn.init.zeros_(self.condition_gate.weight)
-        nn.init.zeros_(self.condition_gate.bias)
+        nn.init.kaiming_normal_(self.feature_proj[0].weight, nonlinearity="linear")
+        nn.init.xavier_uniform_(self.condition_gate.weight)
+        nn.init.constant_(self.condition_gate.bias, 0.01)
 
     def forward(
         self,
@@ -412,7 +458,7 @@ class CompleteModel(nn.Module):
         # GCN推理（如果提供邻接矩阵）
         c_graph = None
         if adj_matrix is not None:
-            c_graph = self.gcn(c_heatmap, adj_matrix)
+            c_graph = self.gcn(torch.sigmoid(c_heatmap), adj_matrix)
         
         return {
             'f_visual': f_visual,

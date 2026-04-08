@@ -492,6 +492,7 @@ class ConceptualSSLFramework:
                 contour_mask=batch_contour_mask,
                 spatial_heatmap=outputs_weak.get('spatial_concept_heatmap'),
                 spatial_heatmap_strong=outputs_strong.get('spatial_concept_heatmap'),
+                spatial_pseudo_weight=self.lambda_spatial_align,
                 negative_features=negative_features,
                 sample_weights=sample_weights
             )

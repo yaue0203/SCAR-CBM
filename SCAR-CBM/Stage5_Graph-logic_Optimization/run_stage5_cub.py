@@ -67,9 +67,8 @@ def _load_stage2_helpers():
 
 
 def _load_cub_gt_loader():
-    stage1_py = os.path.join(_ROOT, "Stage1", "run_cub_stage1.py")
-    m = _load_module(stage1_py, "run_cub_stage1")
-    return m.load_cub_train_concept_matrix
+    from stage1_data_utils import load_cub_train_concept_matrix
+    return load_cub_train_concept_matrix
 
 
 def _load_npz(path: str) -> Dict[str, np.ndarray]:
@@ -371,6 +370,28 @@ def main() -> None:
     run_stage5_cub_training(args)
 
 
+def _write_epoch_row_summary(output_dir: str, history: Dict[str, list[float]]) -> str:
+    keys = list(history.keys())
+    num_epochs = max((len(v) for v in history.values()), default=0)
+    out_path = os.path.join(output_dir, "stage5_cub_training_summary_rows.txt")
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        for epoch_idx in range(num_epochs):
+            parts = [f"epoch={epoch_idx + 1}"]
+            for key in keys:
+                values = history.get(key, [])
+                if epoch_idx >= len(values):
+                    continue
+                val = float(values[epoch_idx])
+                if val != val:
+                    parts.append(f"{key}=nan")
+                else:
+                    parts.append(f"{key}={val:.6f}")
+            f.write(" | ".join(parts) + "\n")
+
+    return out_path
+
+
 def run_stage5_cub_training(args) -> None:
     """
     执行 Stage5 CUB 训练（与 `main()` 中 argparse 解析后的逻辑一致）。
@@ -554,6 +575,9 @@ def run_stage5_cub_training(args) -> None:
         with open(out_json, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, ensure_ascii=False)
         print(f"已写入: {out_json}")
+
+        out_rows = _write_epoch_row_summary(output_dir, serializable)
+        print(f"已写入: {out_rows}")
 
     if args.save_weights:
         save_path = os.path.abspath(args.save_weights)

@@ -7,32 +7,21 @@
   - 支持按 epoch 迭代并更新伪标签历史
 
 典型用法（在 SCAR-CBM 根目录）:
-  python "Stage3_Pseudo-label/run_stage3.py" \
-      --unlabeled-npz "Stage2_Semantic-feature-extraction/stage2_output/stage2_features.npz" \
-      --labeled-features-npy your_labeled_features.npy \
-      --labeled-labels-npy your_labeled_labels.npy \
-      --num-concepts 312
+  python "Stage3_Pseudo-label/run_stage3.py"       --unlabeled-npz "Stage2_Semantic-feature-extraction/stage2_output/stage2_features.npz"       --labeled-features-npy your_labeled_features.npy       --labeled-labels-npy your_labeled_labels.npy       --num-concepts 312
 
   # CUB：随机 10%% 训练样本作有标签（312 维属性真值），其余作无标签查询
-  python "Stage3_Pseudo-label/run_stage3.py" \
-      --unlabeled-npz .../stage2_features.npz \
-      --cub-root Data/CUB_200_2011 \
-      --split-seed 42 \
-      --num-concepts 312
+  python "Stage3_Pseudo-label/run_stage3.py"       --unlabeled-npz .../stage2_features.npz       --cub-root Data/CUB_200_2011       --split-seed 42       --num-concepts 312
 
   # 默认行为：若未提供手工 labeled 输入，则自动按 CUB train 的 10%% / 90%% 划分
-  python "Stage3_Pseudo-label/run_stage3.py" \
-      --unlabeled-npz .../stage2_features.npz \
-      --num-concepts 312
+  python "Stage3_Pseudo-label/run_stage3.py"       --unlabeled-npz .../stage2_features.npz       --num-concepts 312
 """
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import os
 import sys
-from typing import Callable, Dict, Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 import torch
@@ -43,24 +32,8 @@ if _ROOT not in sys.path:
 
 from core_modules import PseudoLabelHistory, knn_retrieval
 from pseudo_label_and_sampling import PseudoLabelGenerator
+from stage1_data_utils import complement_indices, load_cub_train_concept_matrix, sample_labeled_rows
 from stage_output_utils import find_latest_output_file, resolve_default_output_dir
-
-
-def _load_cub_stage1_module():
-    """复用 Stage1 中与 CUB train 顺序一致的概念矩阵与抽样逻辑。"""
-    stage1_path = os.path.join(_ROOT, "Stage1", "run_cub_stage1.py")
-    if not os.path.isfile(stage1_path):
-        raise FileNotFoundError(f"未找到 {stage1_path}，无法加载 CUB 概念真值")
-    spec = importlib.util.spec_from_file_location("run_cub_stage1", stage1_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"无法加载模块: {stage1_path}")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-def _load_cub_train_concept_loader() -> Callable[..., Tuple[np.ndarray, dict]]:
-    return _load_cub_stage1_module().load_cub_train_concept_matrix
 
 
 def split_cub_labeled_fraction(
@@ -96,15 +69,13 @@ def split_cub_labeled_fraction(
     if not (0.0 < labeled_fraction <= 1.0):
         raise ValueError("--labeled-fraction 必须在 (0, 1] 内，例如 0.1 表示 10%")
 
-    stage1_mod = _load_cub_stage1_module()
-    _, labeled_idx = stage1_mod.sample_labeled_rows(
+    _, labeled_idx = sample_labeled_rows(
         gt_concepts,
         ratio=float(labeled_fraction),
         seed=int(seed),
     )
     labeled_idx = labeled_idx.astype(np.int64, copy=False)
-    all_idx = np.arange(n, dtype=np.int64)
-    unlabeled_idx = np.setdiff1d(all_idx, labeled_idx, assume_unique=True)
+    unlabeled_idx = complement_indices(n, labeled_idx)
 
     if unlabeled_idx.size == 0:
         raise ValueError("有标签比例过高，导致无标签集合为空；Stage3 需要至少 1 个无标签样本")
@@ -169,13 +140,11 @@ def load_labeled_refs(
         if "labels" in payload:
             y_l = torch.from_numpy(payload["labels"].astype(np.float32))
         elif "c_heatmap" in payload:
-            # 若无人工标签，可退化为使用 Stage2 概念热力图作为检索标签
             y_l = torch.from_numpy(payload["c_heatmap"].astype(np.float32))
             print("警告: labeled npz 中未找到 labels，使用 c_heatmap 作为 KNN 标签参考。")
         else:
             raise KeyError(f"{labeled_npz} 中缺少 labels 或 c_heatmap 键")
     else:
-        # 最小兜底：无额外标注时使用 unlabeled 自身热力图做检索库（仅用于流程跑通）
         f_l = unlabeled_features
         y_l = unlabeled_heatmap
         print("警告: 未提供 labeled 参考数据，退化为使用 unlabeled 特征自身进行 KNN 检索。")
@@ -363,8 +332,7 @@ def main() -> None:
     unlabeled_idx_np: np.ndarray | None = None
 
     if use_cub_split:
-        load_gt = _load_cub_train_concept_loader()
-        gt_mat, gt_meta = load_gt(args.cub_root)
+        gt_mat, gt_meta = load_cub_train_concept_matrix(args.cub_root)
         if gt_mat.shape[1] != args.num_concepts:
             raise ValueError(
                 f"CUB 概念维度 {gt_mat.shape[1]} 与 --num-concepts={args.num_concepts} 不一致"
@@ -379,7 +347,7 @@ def main() -> None:
         print(
             f"CUB 划分: labeled={f_l.shape[0]} ({100.0 * f_l.shape[0] / f_full.shape[0]:.2f}%%), "
             f"unlabeled={f_u.shape[0]}, cub_train_N={gt_meta.get('num_train', f_full.shape[0])}; "
-            "labeled 采样与 Stage1 保持一致"
+            f"labeled 采样与 Stage1 保持一致, cache_hit={gt_meta.get('cache_hit', False)}"
         )
     else:
         f_u, c_u = f_full, c_full
@@ -433,6 +401,8 @@ def main() -> None:
         "split_seed": args.split_seed if use_cub_split else None,
         "num_labeled_split": int(f_l.shape[0]) if use_cub_split else None,
         "num_unlabeled_split": int(f_u.shape[0]) if use_cub_split else None,
+        "cub_cache_hit": bool(gt_meta.get('cache_hit', False)) if use_cub_split else None,
+        "cub_cache_path": gt_meta.get('cache_path') if use_cub_split else None,
         "num_concepts": args.num_concepts,
         "alpha": args.alpha,
         "epochs": args.epochs,
@@ -455,4 +425,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
