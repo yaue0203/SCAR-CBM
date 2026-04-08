@@ -1,6 +1,0 @@
-num_train: 5994
-num_concepts: 312
-cub_root: /root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011
-rows_without_any_label: 0
-cooccurrence_threshold: 0.01
-hypergraph_edges: 3484
