@@ -1,0 +1,14 @@
+num_train: 5994
+num_concepts: 312
+cub_root: /root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011
+rows_without_any_label: 0
+cache_hit: True
+cache_path: /root/autodl-tmp/SCAR-CBM/Stage1/.cache/cub_train_concepts_25dc5bc3c584.npz
+source_signature: {'split_path': '/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/train_test_split.txt', 'split_mtime_ns': 1311637515000000000, 'split_size': 83198, 'attr_path': '/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/attributes/image_attribute_labels.txt', 'attr_mtime_ns': 1311637671000000000, 'attr_size': 73132180, 'num_concepts': 312}
+labeled_ratio: 0.1
+num_labeled_total: 5994
+num_labeled_used: 600
+num_unlabeled_remaining: 5394
+sample_seed: 42
+cooccurrence_threshold: 0.01
+hypergraph_edges: 4530

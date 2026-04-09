@@ -205,14 +205,31 @@ class ConceptSpatialAlignment(nn.Module):
             nn.Conv2d(feature_dim, feature_dim, kernel_size=1, bias=False),
             nn.GroupNorm(8, feature_dim),
         )
+        self.adapter_dim = max(16, feature_dim // 8)
+        self.score_adapter = nn.Sequential(
+            nn.Conv2d(feature_dim, self.adapter_dim, kernel_size=1, bias=False),
+            nn.GroupNorm(4, self.adapter_dim),
+            nn.GELU(),
+        )
+        self.score_adapter_weight = nn.Parameter(torch.empty(num_concepts, self.adapter_dim))
+        self.score_adapter_bias = nn.Parameter(torch.zeros(num_concepts))
         self.condition_gate = nn.Linear(num_concepts * 2, num_concepts)
+        self.score_mix_gate = nn.Linear(num_concepts * 2, num_concepts)
+        self.score_residual_scale = nn.Parameter(torch.tensor(0.6))
+        self.mix_min = 0.08
+        self.mix_max = 0.24
         self.border_common_mode_scale = nn.Parameter(torch.tensor(0.35))
         self.border_ratio = 0.12
         nn.init.xavier_uniform_(self.pos_embeddings)
         nn.init.xavier_uniform_(self.neg_embeddings)
         nn.init.kaiming_normal_(self.feature_proj[0].weight, nonlinearity="linear")
+        nn.init.kaiming_normal_(self.score_adapter[0].weight, nonlinearity="linear")
+        nn.init.xavier_uniform_(self.score_adapter_weight)
+        nn.init.zeros_(self.score_adapter_bias)
         nn.init.xavier_uniform_(self.condition_gate.weight)
         nn.init.constant_(self.condition_gate.bias, 0.01)
+        nn.init.xavier_uniform_(self.score_mix_gate.weight)
+        nn.init.constant_(self.score_mix_gate.bias, -3.0)
 
     def forward(
         self,
@@ -232,15 +249,17 @@ class ConceptSpatialAlignment(nn.Module):
             spatial_concept_heatmap: [B, num_concepts, H, W]，每个概念的空间概率图
         """
         b, _, h, w = spatial_features.shape
-        spatial_proj = self.feature_proj(spatial_features)
-        spatial_proj = F.normalize(spatial_proj, dim=1)
-        spatial_proj = spatial_proj.view(b, self.feature_dim, h * w).transpose(1, 2)
+        spatial_proj_map = self.feature_proj(spatial_features)
+        spatial_proj = F.normalize(spatial_proj_map, dim=1)
+        spatial_proj_flat = spatial_proj.view(b, self.feature_dim, h * w).transpose(1, 2)
 
         global_prob = torch.sigmoid(c_global)
         concept_prob = global_prob
+        mix_input = None
         if c_local is not None:
             local_prob = torch.sigmoid(c_local)
-            mix_gate = torch.sigmoid(self.condition_gate(torch.cat([c_global, c_local], dim=-1)))
+            mix_input = torch.cat([c_global, c_local], dim=-1)
+            mix_gate = torch.sigmoid(self.condition_gate(mix_input))
             concept_prob = mix_gate * local_prob + (1.0 - mix_gate) * global_prob
         if c_fused is not None:
             fused_prob = torch.sigmoid(c_fused)
@@ -252,8 +271,19 @@ class ConceptSpatialAlignment(nn.Module):
         concept_embeddings = concept_prob * pos + (1.0 - concept_prob) * neg
         concept_embeddings = F.normalize(concept_embeddings, dim=-1)
 
-        scores = torch.einsum('bnd,bkd->bnk', spatial_proj, concept_embeddings)
-        scores = scores.transpose(1, 2).view(b, self.num_concepts, h, w)
+        similarity_scores = torch.einsum('bnd,bkd->bnk', spatial_proj_flat, concept_embeddings)
+        similarity_scores = similarity_scores.transpose(1, 2).view(b, self.num_concepts, h, w)
+        adapter_map = self.score_adapter(spatial_proj_map)
+        head_scores = torch.einsum('bdhw,cd->bchw', adapter_map, self.score_adapter_weight)
+        head_scores = torch.tanh(head_scores + self.score_adapter_bias.view(1, -1, 1, 1))
+
+        if mix_input is None:
+            mix_input = torch.cat([c_global, c_global], dim=-1)
+        score_mix = torch.sigmoid(self.score_mix_gate(mix_input))
+        score_mix = self.mix_min + (self.mix_max - self.mix_min) * score_mix
+        score_mix = score_mix.unsqueeze(-1).unsqueeze(-1)
+        residual_scale = self.score_residual_scale.clamp(min=0.1, max=1.0)
+        scores = similarity_scores + residual_scale * score_mix * head_scores
 
         bw = max(1, int(round(min(h, w) * self.border_ratio)))
         border_mask = scores.new_zeros((1, 1, h, w))

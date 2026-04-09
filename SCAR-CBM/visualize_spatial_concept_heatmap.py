@@ -121,7 +121,7 @@ def upsample_heatmaps(
     if heatmaps.ndim != 3:
         raise ValueError(f"期望 [K,h,w]，得到 {tuple(heatmaps.shape)}")
     x = heatmaps.unsqueeze(0).float()
-    x = F.interpolate(x, size=(out_h, out_w), mode="bilinear", align_corners=True)
+    x = F.interpolate(x, size=(out_h, out_w), mode="bilinear", align_corners=False)
     return x.squeeze(0)
 
 
@@ -230,7 +230,11 @@ def save_panel(
         ax = axes[r, c]
         hm = hmaps[i]
         p_lo, p_hi = np.percentile(hm, [2, 98])
-        hm = np.clip((hm - p_lo) / (p_hi - p_lo + 1e-8), 0.0, 1.0)
+        spread = p_hi - p_lo
+        if spread < 0.05:   # 响应太弱：该概念在此图几乎无激活，压成全零避免噪声放大
+            hm = np.zeros_like(hm)
+        else:
+            hm = np.clip((hm - p_lo) / (spread + 1e-8), 0.0, 1.0)
         blended = overlay_rgb(img, hm, cmap_name=cmap_name, alpha=alpha)
         ax.imshow(blended)
         ax.set_title(f"concept {cid}")

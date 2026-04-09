@@ -131,6 +131,25 @@ def forward_spatial_only(
     }
 
 
+def score_head_diversity_loss(model: CompleteModel, max_pairs: int = 64) -> torch.Tensor:
+    align = model.concept_spatial_align
+    if hasattr(align, 'score_adapter_weight'):
+        weight = align.score_adapter_weight
+    else:
+        weight = align.score_head.weight.view(align.score_head.weight.shape[0], -1)
+    flat = weight.view(weight.shape[0], -1)
+    flat = flat - flat.mean(dim=1, keepdim=True)
+    flat = nn.functional.normalize(flat, dim=1, eps=1e-6)
+    sim = flat @ flat.t()
+    off_diag = sim[~torch.eye(sim.shape[0], dtype=torch.bool, device=sim.device)]
+    if off_diag.numel() == 0:
+        return flat.new_zeros(())
+    penalty = nn.functional.relu(off_diag - 0.2)
+    if penalty.numel() > max_pairs:
+        penalty = torch.topk(penalty, max_pairs).values
+    return penalty.pow(2).mean()
+
+
 def eval_main_metrics(
     model: CompleteModel,
     val_loader: DataLoader,
@@ -219,7 +238,9 @@ def main() -> None:
     parser.add_argument('--lambda-geo', type=float, default=0.3)
     parser.add_argument('--lambda-mask', type=float, default=0.2)
     parser.add_argument('--lambda-diversity', type=float, default=0.08)
+    parser.add_argument('--diversity-min-conf', type=float, default=0.6)
     parser.add_argument('--lambda-consistency', type=float, default=0.1)
+    parser.add_argument('--lambda-head-diversity', type=float, default=0.02)
     parser.add_argument('--min-c-acc', type=float, default=0.90)
     parser.add_argument('--min-y-acc', type=float, default=0.90)
     parser.add_argument('--enforce-metric-floor', action='store_true')
@@ -311,7 +332,7 @@ def main() -> None:
     spatial_pseudo_loss = SpatialPseudoAlignmentLoss()
     spatial_consistency_loss = SpatialConsistencyLoss()
     spatial_mask_loss = SpatialForegroundSeparationLoss()
-    spatial_diversity_loss = SpatialConceptDiversityLoss()
+    spatial_diversity_loss = SpatialConceptDiversityLoss(min_conf=args.diversity_min_conf)
     geo_loss_fn = GeometricConstraintLoss()
 
     baseline_metrics = eval_main_metrics(model, val_loader, device)
@@ -353,11 +374,17 @@ def main() -> None:
             out = forward_spatial_only(model, x)
             loss = args.lambda_labeled * spatial_align_loss(out['spatial_concept_heatmap'], y)
             if args.lambda_diversity > 0.0:
-                loss = loss + args.lambda_diversity * spatial_diversity_loss(out['spatial_concept_heatmap'], y)
+                loss = loss + args.lambda_diversity * spatial_diversity_loss(
+                    out['spatial_concept_heatmap'],
+                    y,
+                    mask,
+                )
             if mask is not None and args.lambda_mask > 0.0:
                 loss = loss + args.lambda_mask * spatial_mask_loss(out['spatial_concept_heatmap'], mask, y)
             if mask is not None and args.lambda_geo > 0.0:
                 loss = loss + args.lambda_geo * geo_loss_fn(out['spatial_concept_heatmap'], mask)
+            if args.lambda_head_diversity > 0.0:
+                loss = loss + args.lambda_head_diversity * score_head_diversity_loss(model)
             loss.backward()
             optimizer.step()
 
@@ -389,6 +416,7 @@ def main() -> None:
                 loss = loss + args.lambda_diversity * spatial_diversity_loss(
                     out_w['spatial_concept_heatmap'],
                     teacher_prob,
+                    mask,
                 )
             if mask is not None and args.lambda_mask > 0.0:
                 loss = loss + args.lambda_mask * spatial_mask_loss(
@@ -398,6 +426,8 @@ def main() -> None:
                 )
             if mask is not None and args.lambda_geo > 0.0:
                 loss = loss + args.lambda_geo * geo_loss_fn(out_w['spatial_concept_heatmap'], mask)
+            if args.lambda_head_diversity > 0.0:
+                loss = loss + args.lambda_head_diversity * score_head_diversity_loss(model)
             loss.backward()
             optimizer.step()
 

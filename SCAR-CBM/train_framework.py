@@ -318,6 +318,7 @@ def run_pipeline_stages_2_to_5(ns: Namespace) -> None:
         batch_size_labeled=ns.batch_size_labeled,
         batch_size_unlabeled=ns.batch_size_unlabeled,
         learning_rate=ns.learning_rate,
+        lambda_spatial_diversity=ns.lambda_spatial_diversity,
         image_size=ns.image_size,
         val_split=ns.val_split,
         seed=ns.seed,
@@ -387,6 +388,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--batch-size-labeled", type=int, default=32)
     p.add_argument("--batch-size-unlabeled", type=int, default=32)
     p.add_argument("--learning-rate", type=float, default=1e-3)
+    p.add_argument(
+        "--lambda-spatial-diversity",
+        type=float,
+        default=0.3,
+        help="Stage5 概念空间热力图去同质化损失权重",
+    )
     p.add_argument("--val-split", type=float, default=0.2)
     p.add_argument(
         "--save-weights",
@@ -437,6 +444,7 @@ def main() -> None:
             batch_size_labeled=ns.batch_size_labeled,
             batch_size_unlabeled=ns.batch_size_unlabeled,
             learning_rate=ns.learning_rate,
+            lambda_spatial_diversity=ns.lambda_spatial_diversity,
             image_size=ns.image_size,
             val_split=ns.val_split,
             seed=ns.seed,

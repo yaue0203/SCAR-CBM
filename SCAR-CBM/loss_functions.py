@@ -460,39 +460,88 @@ class SpatialForegroundSeparationLoss(nn.Module):
 
 
 class SpatialConceptDiversityLoss(nn.Module):
-    """鼓励同一张图内不同概念的热力图不要坍缩成同一个模板。"""
+    """只对当前样本里最相似、最容易混淆的概念对施加前景内去相关约束。"""
 
-    def __init__(self, max_active: int = 6, eps: float = 1e-6):
+    def __init__(
+        self,
+        max_active: int = 6,
+        min_conf: float = 0.6,
+        min_fg_pixels: int = 8,
+        max_pairs: int = 3,
+        similarity_margin: float = 0.45,
+        eps: float = 1e-6,
+    ):
         super().__init__()
         self.max_active = int(max_active)
+        self.min_conf = float(min_conf)
+        self.min_fg_pixels = int(min_fg_pixels)
+        self.max_pairs = int(max_pairs)
+        self.similarity_margin = float(similarity_margin)
         self.eps = float(eps)
 
-    def forward(self, spatial_heatmap: torch.Tensor, concept_targets: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        spatial_heatmap: torch.Tensor,
+        concept_targets: torch.Tensor,
+        contour_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         if spatial_heatmap.dim() != 4:
             raise ValueError('SpatialConceptDiversityLoss 期望 spatial_heatmap 为 [B,C,H,W]')
         if concept_targets.dim() != 2:
             raise ValueError('SpatialConceptDiversityLoss 期望 concept_targets 为 [B,C]')
 
         b, c, h, w = spatial_heatmap.shape
-        flat = spatial_heatmap.view(b, c, h * w)
+        if contour_mask is not None:
+            if contour_mask.dim() == 3:
+                contour_mask = contour_mask.unsqueeze(1)
+            elif contour_mask.dim() != 4:
+                raise ValueError('SpatialConceptDiversityLoss 期望 contour_mask 为 [B,1,H,W] 或 [B,H,W]')
+            mask = F.interpolate(contour_mask.float(), size=(h, w), mode='bilinear', align_corners=True)
+            mask = mask.clamp(0.0, 1.0)
+        else:
+            mask = None
+
         losses = []
         for i in range(b):
             weights = concept_targets[i].float().clamp(0.0, 1.0)
-            active = torch.nonzero(weights > 0.5, as_tuple=False).squeeze(1)
+            active = torch.nonzero(weights > self.min_conf, as_tuple=False).squeeze(1)
             if active.numel() < 2:
                 continue
             if active.numel() > self.max_active:
                 top = torch.topk(weights[active], self.max_active).indices
                 active = active[top]
-            feats = flat[i, active]
+
+            feats = spatial_heatmap[i, active]
+            if mask is not None:
+                sample_mask = mask[i, 0]
+                fg_selector = sample_mask > 0.2
+                if int(fg_selector.sum().item()) < self.min_fg_pixels:
+                    continue
+                feats = feats[:, fg_selector]
+                if feats.shape[-1] < self.min_fg_pixels:
+                    continue
+            else:
+                feats = feats.view(feats.shape[0], -1)
+
             feats = feats - feats.mean(dim=1, keepdim=True)
             feats = F.normalize(feats, dim=1, eps=self.eps)
             sim = feats @ feats.t()
             n = sim.shape[0]
             if n < 2:
                 continue
-            off_diag = sim[~torch.eye(n, dtype=torch.bool, device=sim.device)]
-            losses.append(off_diag.pow(2).mean())
+            off_diag_mask = ~torch.eye(n, dtype=torch.bool, device=sim.device)
+            pair_values = sim[off_diag_mask]
+            if pair_values.numel() == 0:
+                continue
+            pair_penalty = F.relu(pair_values - self.similarity_margin)
+            positive = pair_penalty > 0
+            if positive.any():
+                pair_penalty = pair_penalty[positive]
+            if pair_penalty.numel() == 0:
+                continue
+            k = min(self.max_pairs, pair_penalty.numel())
+            top_pairs = torch.topk(pair_penalty, k).values
+            losses.append(top_pairs.pow(2).mean())
         if not losses:
             return spatial_heatmap.new_zeros(())
         return torch.stack(losses).mean()

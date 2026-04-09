@@ -212,7 +212,10 @@ __marimo__/
 Data/
 
 # SCAR-CBM：各阶段产出与大数据（勿提交至 GitHub）
+# 注意：stage*_output 不匹配 stage2_output_rerun_YYMMDD 等目录名，需单独规则
 SCAR-CBM/**/stage*_output/**/*.npz
+SCAR-CBM/**/stage*_output_*/*.npz
+SCAR-CBM/**/stage*_output_*/**/*.npz
 SCAR-CBM/**/stage*_output/**/*.pt
 SCAR-CBM/**/stage*_output/**/*.pth
 SCAR-CBM/**/stage1_*_output/**/*.pt
@@ -242,3 +245,13 @@ SCAR-CBM/**/stage5_align_only_*/
 
 # SCAR-CBM 根目录本地打包备份
 SCAR-CBM/*.zip
+
+SCAR-CBM/concept_visualization/output_rerun_260409/samples
+SCAR-CBM/concept_visualization/output_rerun_260409/summary
+
+SCAR-CBM/RESULTS_FOLDERS_260409
+
+SCAR-CBM/SCAR-CBM_important_code_20260408_091949.zip
+
+SCAR-CBM/concept_visualization/output_mask_vs_nomask_260409
+SCAR-CBM/concept_visualization/output_nomask_260409/samples

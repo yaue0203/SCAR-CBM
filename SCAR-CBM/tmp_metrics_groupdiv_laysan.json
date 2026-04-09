@@ -1,0 +1,1033 @@
+{
+  "weights": "/root/autodl-tmp/SCAR-CBM/Stage5_Graph-logic_Optimization/stage5_align_only_resnet34_groupdiv_260408/stage5_align_only_best.pt",
+  "images_dir": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross",
+  "num_images": 60,
+  "metrics": {
+    "num_active": 5.983333333333333,
+    "mean_fg_ratio": 0.18075933788592616,
+    "active_mean_fg_ratio": 0.24486437294011315,
+    "active_mean_peak": 0.7764028896888097,
+    "active_mean_similarity": 0.8475450148185094,
+    "active_max_similarity": 0.8982553909222285
+  },
+  "rows": [
+    {
+      "num_active": 3,
+      "mean_fg_ratio": 0.03758348152041435,
+      "active_mean_fg_ratio": 0.06955254077911377,
+      "active_mean_peak": 0.7206578254699707,
+      "active_mean_similarity": 0.9787989854812622,
+      "active_max_similarity": 0.9905873537063599,
+      "active_concepts": [
+        51,
+        54,
+        145
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0001_545.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.08841552585363388,
+      "active_mean_fg_ratio": 0.11627348512411118,
+      "active_mean_peak": 0.8157875537872314,
+      "active_mean_similarity": 0.9888702630996704,
+      "active_max_similarity": 0.999064028263092,
+      "active_concepts": [
+        145,
+        244,
+        51,
+        209,
+        117,
+        132,
+        149,
+        289
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0002_1027.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.0835607647895813,
+      "active_mean_fg_ratio": 0.11200980097055435,
+      "active_mean_peak": 0.775357723236084,
+      "active_mean_similarity": 0.8032400012016296,
+      "active_max_similarity": 0.9948275089263916,
+      "active_concepts": [
+        145,
+        54,
+        35,
+        151,
+        244,
+        10,
+        289,
+        218
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0003_1033.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.08745911717414856,
+      "active_mean_fg_ratio": 0.09919354319572449,
+      "active_mean_peak": 0.855690062046051,
+      "active_mean_similarity": 0.8203607797622681,
+      "active_max_similarity": 0.9885658621788025,
+      "active_concepts": [
+        145,
+        54,
+        218,
+        151,
+        235,
+        35,
+        244,
+        240
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0004_930.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.3408844470977783,
+      "active_mean_fg_ratio": 0.4792596697807312,
+      "active_mean_peak": 0.8869457244873047,
+      "active_mean_similarity": 0.9456027746200562,
+      "active_max_similarity": 0.9934920072555542,
+      "active_concepts": [
+        145,
+        51,
+        151,
+        240,
+        244,
+        178,
+        289,
+        149
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0005_565.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.19986234605312347,
+      "active_mean_fg_ratio": 0.30623859167099,
+      "active_mean_peak": 0.8353917598724365,
+      "active_mean_similarity": 0.9313661456108093,
+      "active_max_similarity": 0.9938627481460571,
+      "active_concepts": [
+        145,
+        151,
+        54,
+        244,
+        218,
+        117,
+        235,
+        35
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0006_702.jpg"
+    },
+    {
+      "num_active": 2,
+      "mean_fg_ratio": 0.04712085798382759,
+      "active_mean_fg_ratio": 0.05738852545619011,
+      "active_mean_peak": 0.6702077984809875,
+      "active_mean_similarity": 0.9842692613601685,
+      "active_max_similarity": 0.9842692613601685,
+      "active_concepts": [
+        20,
+        145
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0012_696.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.1479652374982834,
+      "active_mean_fg_ratio": 0.20729964971542358,
+      "active_mean_peak": 0.7886396646499634,
+      "active_mean_similarity": 0.9027557373046875,
+      "active_max_similarity": 0.9902275800704956,
+      "active_concepts": [
+        145,
+        244,
+        54,
+        51,
+        151,
+        218,
+        209,
+        132
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0013_910.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.38017532229423523,
+      "active_mean_fg_ratio": 0.4914587140083313,
+      "active_mean_peak": 0.9037362337112427,
+      "active_mean_similarity": 0.9539557099342346,
+      "active_max_similarity": 0.996549665927887,
+      "active_concepts": [
+        145,
+        289,
+        151,
+        244,
+        240,
+        218,
+        117,
+        209
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0017_614.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.1941775381565094,
+      "active_mean_fg_ratio": 0.2927408218383789,
+      "active_mean_peak": 0.9185799956321716,
+      "active_mean_similarity": 0.9911920428276062,
+      "active_max_similarity": 0.9993378520011902,
+      "active_concepts": [
+        145,
+        289,
+        244,
+        218,
+        240,
+        151,
+        209,
+        163
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0018_492.jpg"
+    },
+    {
+      "num_active": 2,
+      "mean_fg_ratio": 0.11131364107131958,
+      "active_mean_fg_ratio": 0.14443588256835938,
+      "active_mean_peak": 0.7127294540405273,
+      "active_mean_similarity": 0.9968159794807434,
+      "active_max_similarity": 0.9968159794807434,
+      "active_concepts": [
+        145,
+        151
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0021_737.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.043737903237342834,
+      "active_mean_fg_ratio": 0.05145127326250076,
+      "active_mean_peak": 0.8153584003448486,
+      "active_mean_similarity": 0.8401136994361877,
+      "active_max_similarity": 0.9834154844284058,
+      "active_concepts": [
+        145,
+        151,
+        244,
+        54,
+        218,
+        35,
+        289,
+        117
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0023_1059.jpg"
+    },
+    {
+      "num_active": 4,
+      "mean_fg_ratio": 0.11649271100759506,
+      "active_mean_fg_ratio": 0.15179100632667542,
+      "active_mean_peak": 0.6624718904495239,
+      "active_mean_similarity": 0.994935929775238,
+      "active_max_similarity": 0.9963869452476501,
+      "active_concepts": [
+        145,
+        151,
+        218,
+        235
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0025_571.jpg"
+    },
+    {
+      "num_active": 2,
+      "mean_fg_ratio": 0.05730007216334343,
+      "active_mean_fg_ratio": 0.04318469390273094,
+      "active_mean_peak": 0.6869610548019409,
+      "active_mean_similarity": 0.988267719745636,
+      "active_max_similarity": 0.988267719745636,
+      "active_concepts": [
+        145,
+        235
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0028_643.jpg"
+    },
+    {
+      "num_active": 4,
+      "mean_fg_ratio": 0.40505799651145935,
+      "active_mean_fg_ratio": 0.534160852432251,
+      "active_mean_peak": 0.696485161781311,
+      "active_mean_similarity": 0.9958963394165039,
+      "active_max_similarity": 0.9983845353126526,
+      "active_concepts": [
+        145,
+        151,
+        218,
+        235
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0029_482.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.13183395564556122,
+      "active_mean_fg_ratio": 0.14230018854141235,
+      "active_mean_peak": 0.8760099411010742,
+      "active_mean_similarity": 0.9208077192306519,
+      "active_max_similarity": 0.9963494539260864,
+      "active_concepts": [
+        145,
+        151,
+        244,
+        218,
+        289,
+        35,
+        240,
+        117
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0033_658.jpg"
+    },
+    {
+      "num_active": 4,
+      "mean_fg_ratio": 0.13831724226474762,
+      "active_mean_fg_ratio": 0.16195392608642578,
+      "active_mean_peak": 0.6885589957237244,
+      "active_mean_similarity": 0.9581702947616577,
+      "active_max_similarity": 0.9896693825721741,
+      "active_concepts": [
+        6,
+        145,
+        218,
+        235
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0034_628.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.3917122781276703,
+      "active_mean_fg_ratio": 0.5125603675842285,
+      "active_mean_peak": 0.7396007776260376,
+      "active_mean_similarity": 0.8278576135635376,
+      "active_max_similarity": 0.9841371178627014,
+      "active_concepts": [
+        35,
+        51,
+        54,
+        145,
+        151,
+        218,
+        244,
+        289
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0035_876.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.11927665770053864,
+      "active_mean_fg_ratio": 0.2298063039779663,
+      "active_mean_peak": 0.7763368487358093,
+      "active_mean_similarity": 0.8991003632545471,
+      "active_max_similarity": 0.9946117997169495,
+      "active_concepts": [
+        145,
+        289,
+        244,
+        218,
+        240,
+        51,
+        151,
+        54
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0037_699.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.21299441158771515,
+      "active_mean_fg_ratio": 0.3122319281101227,
+      "active_mean_peak": 0.902931809425354,
+      "active_mean_similarity": 0.9755451083183289,
+      "active_max_similarity": 0.9984043836593628,
+      "active_concepts": [
+        145,
+        244,
+        218,
+        289,
+        151,
+        35,
+        240,
+        209
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0039_924.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.09606848657131195,
+      "active_mean_fg_ratio": 0.15332633256912231,
+      "active_mean_peak": 0.7484111189842224,
+      "active_mean_similarity": 0.9723876118659973,
+      "active_max_similarity": 0.9977163076400757,
+      "active_concepts": [
+        145,
+        51,
+        244,
+        117,
+        240,
+        209,
+        149,
+        178
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0040_472.jpg"
+    },
+    {
+      "num_active": 0,
+      "mean_fg_ratio": 0.29275012016296387,
+      "active_mean_fg_ratio": 0.0,
+      "active_mean_peak": 0.0,
+      "active_mean_similarity": 0.0,
+      "active_max_similarity": 0.0,
+      "active_concepts": [],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0042_801.jpg"
+    },
+    {
+      "num_active": 1,
+      "mean_fg_ratio": 0.21321910619735718,
+      "active_mean_fg_ratio": 0.3116915225982666,
+      "active_mean_peak": 0.7476797103881836,
+      "active_mean_similarity": 0.0,
+      "active_max_similarity": 0.0,
+      "active_concepts": [
+        145
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0044_784.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.19058991968631744,
+      "active_mean_fg_ratio": 0.3242979645729065,
+      "active_mean_peak": 0.7602654695510864,
+      "active_mean_similarity": 0.9802553057670593,
+      "active_max_similarity": 0.9979904294013977,
+      "active_concepts": [
+        145,
+        289,
+        244,
+        218,
+        35,
+        178,
+        51,
+        151
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0047_619.jpg"
+    },
+    {
+      "num_active": 1,
+      "mean_fg_ratio": 0.29820865392684937,
+      "active_mean_fg_ratio": 0.40696772933006287,
+      "active_mean_peak": 0.7125881314277649,
+      "active_mean_similarity": 0.0,
+      "active_max_similarity": 0.0,
+      "active_concepts": [
+        145
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0049_918.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.24708862602710724,
+      "active_mean_fg_ratio": 0.3584432601928711,
+      "active_mean_peak": 0.9103947877883911,
+      "active_mean_similarity": 0.96235191822052,
+      "active_max_similarity": 0.9965879917144775,
+      "active_concepts": [
+        145,
+        151,
+        51,
+        244,
+        289,
+        240,
+        178,
+        259
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0050_870.jpg"
+    },
+    {
+      "num_active": 1,
+      "mean_fg_ratio": 0.05892409011721611,
+      "active_mean_fg_ratio": 0.06286270171403885,
+      "active_mean_peak": 0.7329589128494263,
+      "active_mean_similarity": 0.0,
+      "active_max_similarity": 0.0,
+      "active_concepts": [
+        145
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0051_1020.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.1358797550201416,
+      "active_mean_fg_ratio": 0.21630452573299408,
+      "active_mean_peak": 0.9232730865478516,
+      "active_mean_similarity": 0.9788773059844971,
+      "active_max_similarity": 0.9993613958358765,
+      "active_concepts": [
+        145,
+        289,
+        51,
+        244,
+        218,
+        151,
+        240,
+        178
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0053_543.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.40556600689888,
+      "active_mean_fg_ratio": 0.5752521753311157,
+      "active_mean_peak": 0.8050640821456909,
+      "active_mean_similarity": 0.9194667339324951,
+      "active_max_similarity": 0.9915180206298828,
+      "active_concepts": [
+        145,
+        244,
+        289,
+        54,
+        218,
+        51,
+        235,
+        151
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0055_570.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.13798026740550995,
+      "active_mean_fg_ratio": 0.21765181422233582,
+      "active_mean_peak": 0.7283018827438354,
+      "active_mean_similarity": 0.9886190295219421,
+      "active_max_similarity": 0.9987744688987732,
+      "active_concepts": [
+        145,
+        51,
+        244,
+        149,
+        209,
+        117,
+        178,
+        304
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0056_500.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.21193397045135498,
+      "active_mean_fg_ratio": 0.2609196901321411,
+      "active_mean_peak": 0.8045511245727539,
+      "active_mean_similarity": 0.8978047370910645,
+      "active_max_similarity": 0.9835014939308167,
+      "active_concepts": [
+        145,
+        54,
+        289,
+        244,
+        35,
+        151,
+        10,
+        209
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0058_637.jpg"
+    },
+    {
+      "num_active": 2,
+      "mean_fg_ratio": 0.12186246365308762,
+      "active_mean_fg_ratio": 0.1592104434967041,
+      "active_mean_peak": 0.6786892414093018,
+      "active_mean_similarity": 0.9552938938140869,
+      "active_max_similarity": 0.9552938938140869,
+      "active_concepts": [
+        20,
+        145
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0059_488.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.025186875835061073,
+      "active_mean_fg_ratio": 0.029987772926688194,
+      "active_mean_peak": 0.8814746141433716,
+      "active_mean_similarity": 0.9001846313476562,
+      "active_max_similarity": 0.9879199862480164,
+      "active_concepts": [
+        145,
+        54,
+        151,
+        218,
+        244,
+        289,
+        240,
+        163
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0060_777.jpg"
+    },
+    {
+      "num_active": 2,
+      "mean_fg_ratio": 0.17016007006168365,
+      "active_mean_fg_ratio": 0.2600870728492737,
+      "active_mean_peak": 0.7261949777603149,
+      "active_mean_similarity": 0.4817863702774048,
+      "active_max_similarity": 0.4817863702774048,
+      "active_concepts": [
+        29,
+        54
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0061_563.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.13959449529647827,
+      "active_mean_fg_ratio": 0.1901138424873352,
+      "active_mean_peak": 0.835956335067749,
+      "active_mean_similarity": 0.9249589443206787,
+      "active_max_similarity": 0.9965683221817017,
+      "active_concepts": [
+        145,
+        244,
+        151,
+        54,
+        289,
+        35,
+        117,
+        218
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0064_674.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.1397036612033844,
+      "active_mean_fg_ratio": 0.1588396430015564,
+      "active_mean_peak": 0.8956769704818726,
+      "active_mean_similarity": 0.9380204677581787,
+      "active_max_similarity": 0.9937217235565186,
+      "active_concepts": [
+        145,
+        289,
+        218,
+        244,
+        151,
+        178,
+        35,
+        240
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0065_809.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.2983592450618744,
+      "active_mean_fg_ratio": 0.37662139534950256,
+      "active_mean_peak": 0.8647686839103699,
+      "active_mean_similarity": 0.8489571213722229,
+      "active_max_similarity": 0.9886051416397095,
+      "active_concepts": [
+        145,
+        235,
+        218,
+        244,
+        151,
+        54,
+        240,
+        308
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0068_726.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.38524648547172546,
+      "active_mean_fg_ratio": 0.49571508169174194,
+      "active_mean_peak": 0.8236709237098694,
+      "active_mean_similarity": 0.8626821041107178,
+      "active_max_similarity": 0.9910261631011963,
+      "active_concepts": [
+        145,
+        35,
+        218,
+        151,
+        54,
+        244,
+        289,
+        117
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0070_788.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.18295584619045258,
+      "active_mean_fg_ratio": 0.2066345512866974,
+      "active_mean_peak": 0.8662885427474976,
+      "active_mean_similarity": 0.9907795786857605,
+      "active_max_similarity": 0.9996913075447083,
+      "active_concepts": [
+        145,
+        51,
+        244,
+        209,
+        117,
+        151,
+        149,
+        289
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0071_792.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.1809103786945343,
+      "active_mean_fg_ratio": 0.2633551359176636,
+      "active_mean_peak": 0.8704107403755188,
+      "active_mean_similarity": 0.9801474809646606,
+      "active_max_similarity": 0.9989318251609802,
+      "active_concepts": [
+        145,
+        51,
+        244,
+        178,
+        209,
+        151,
+        149,
+        117
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0073_927.jpg"
+    },
+    {
+      "num_active": 3,
+      "mean_fg_ratio": 0.023354385048151016,
+      "active_mean_fg_ratio": 0.040552109479904175,
+      "active_mean_peak": 0.6888313293457031,
+      "active_mean_similarity": 0.9978151321411133,
+      "active_max_similarity": 0.9990543127059937,
+      "active_concepts": [
+        117,
+        145,
+        244
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0075_668.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.30317938327789307,
+      "active_mean_fg_ratio": 0.4268386960029602,
+      "active_mean_peak": 0.9458513855934143,
+      "active_mean_similarity": 0.9750480651855469,
+      "active_max_similarity": 0.9982107281684875,
+      "active_concepts": [
+        145,
+        289,
+        151,
+        218,
+        244,
+        117,
+        240,
+        209
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0076_671.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.22161823511123657,
+      "active_mean_fg_ratio": 0.3435940742492676,
+      "active_mean_peak": 0.7635520100593567,
+      "active_mean_similarity": 0.9374091625213623,
+      "active_max_similarity": 0.9963371753692627,
+      "active_concepts": [
+        145,
+        54,
+        244,
+        151,
+        218,
+        35,
+        289,
+        235
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0079_506.jpg"
+    },
+    {
+      "num_active": 1,
+      "mean_fg_ratio": 0.16234757006168365,
+      "active_mean_fg_ratio": 0.23849548399448395,
+      "active_mean_peak": 0.716175377368927,
+      "active_mean_similarity": 0.0,
+      "active_max_similarity": 0.0,
+      "active_concepts": [
+        145
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0080_821.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.14182330667972565,
+      "active_mean_fg_ratio": 0.25057271122932434,
+      "active_mean_peak": 0.8814206123352051,
+      "active_mean_similarity": 0.9483423829078674,
+      "active_max_similarity": 0.9994426965713501,
+      "active_concepts": [
+        145,
+        51,
+        151,
+        240,
+        178,
+        244,
+        289,
+        218
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0081_800.jpg"
+    },
+    {
+      "num_active": 4,
+      "mean_fg_ratio": 0.23924881219863892,
+      "active_mean_fg_ratio": 0.2657707929611206,
+      "active_mean_peak": 0.6841119527816772,
+      "active_mean_similarity": 0.9492036700248718,
+      "active_max_similarity": 0.9912024736404419,
+      "active_concepts": [
+        6,
+        54,
+        145,
+        235
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0082_524.jpg"
+    },
+    {
+      "num_active": 2,
+      "mean_fg_ratio": 0.14735758304595947,
+      "active_mean_fg_ratio": 0.19915908575057983,
+      "active_mean_peak": 0.7416092157363892,
+      "active_mean_similarity": 0.9723716378211975,
+      "active_max_similarity": 0.9723716378211975,
+      "active_concepts": [
+        54,
+        145
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0083_756.jpg"
+    },
+    {
+      "num_active": 2,
+      "mean_fg_ratio": 0.261637419462204,
+      "active_mean_fg_ratio": 0.31250837445259094,
+      "active_mean_peak": 0.7049487829208374,
+      "active_mean_similarity": 0.884397566318512,
+      "active_max_similarity": 0.884397566318512,
+      "active_concepts": [
+        20,
+        145
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0085_564.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.24090880155563354,
+      "active_mean_fg_ratio": 0.3409901261329651,
+      "active_mean_peak": 0.79261714220047,
+      "active_mean_similarity": 0.8752971887588501,
+      "active_max_similarity": 0.9823560118675232,
+      "active_concepts": [
+        145,
+        35,
+        54,
+        151,
+        289,
+        244,
+        218,
+        117
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0088_883.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.20627707242965698,
+      "active_mean_fg_ratio": 0.3523796796798706,
+      "active_mean_peak": 0.7575688362121582,
+      "active_mean_similarity": 0.986860990524292,
+      "active_max_similarity": 0.9980579018592834,
+      "active_concepts": [
+        145,
+        289,
+        35,
+        218,
+        244,
+        178,
+        240,
+        151
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0091_602.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.13941605389118195,
+      "active_mean_fg_ratio": 0.24764271080493927,
+      "active_mean_peak": 0.8243863582611084,
+      "active_mean_similarity": 0.931740403175354,
+      "active_max_similarity": 0.9960309267044067,
+      "active_concepts": [
+        145,
+        244,
+        54,
+        218,
+        209,
+        149,
+        151,
+        51
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0092_834.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.13337424397468567,
+      "active_mean_fg_ratio": 0.23117148876190186,
+      "active_mean_peak": 0.8784881234169006,
+      "active_mean_similarity": 0.9533410668373108,
+      "active_max_similarity": 0.9997676014900208,
+      "active_concepts": [
+        145,
+        218,
+        151,
+        240,
+        178,
+        289,
+        54,
+        244
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0093_725.jpg"
+    },
+    {
+      "num_active": 3,
+      "mean_fg_ratio": 0.11007074266672134,
+      "active_mean_fg_ratio": 0.13674746453762054,
+      "active_mean_peak": 0.760697066783905,
+      "active_mean_similarity": 0.7810007929801941,
+      "active_max_similarity": 0.9773880243301392,
+      "active_concepts": [
+        35,
+        54,
+        145
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0094_1013.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.1978425234556198,
+      "active_mean_fg_ratio": 0.21350617706775665,
+      "active_mean_peak": 0.6705184578895569,
+      "active_mean_similarity": 0.6864556074142456,
+      "active_max_similarity": 0.9961628317832947,
+      "active_concepts": [
+        145,
+        29,
+        35,
+        218,
+        235,
+        151,
+        54,
+        6
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0096_673.jpg"
+    },
+    {
+      "num_active": 2,
+      "mean_fg_ratio": 0.26304441690444946,
+      "active_mean_fg_ratio": 0.2979060411453247,
+      "active_mean_peak": 0.7203563451766968,
+      "active_mean_similarity": 0.9195300340652466,
+      "active_max_similarity": 0.9195300340652466,
+      "active_concepts": [
+        35,
+        145
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0098_621.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.32401251792907715,
+      "active_mean_fg_ratio": 0.4859560430049896,
+      "active_mean_peak": 0.9155884981155396,
+      "active_mean_similarity": 0.9622285962104797,
+      "active_max_similarity": 0.9965638518333435,
+      "active_concepts": [
+        145,
+        289,
+        244,
+        218,
+        51,
+        151,
+        209,
+        240
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0099_869.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.20846401154994965,
+      "active_mean_fg_ratio": 0.30028969049453735,
+      "active_mean_peak": 0.9256182909011841,
+      "active_mean_similarity": 0.9793398380279541,
+      "active_max_similarity": 0.996462345123291,
+      "active_concepts": [
+        145,
+        244,
+        218,
+        289,
+        151,
+        149,
+        209,
+        240
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0100_735.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.19526158273220062,
+      "active_mean_fg_ratio": 0.3811771273612976,
+      "active_mean_peak": 0.717607855796814,
+      "active_mean_similarity": 0.9769441485404968,
+      "active_max_similarity": 0.9973371028900146,
+      "active_concepts": [
+        51,
+        145,
+        151,
+        178,
+        218,
+        240,
+        244,
+        289
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0102_611.jpg"
+    },
+    {
+      "num_active": 8,
+      "mean_fg_ratio": 0.044828545302152634,
+      "active_mean_fg_ratio": 0.05665912106633186,
+      "active_mean_peak": 0.8192394971847534,
+      "active_mean_similarity": 0.8595379590988159,
+      "active_max_similarity": 0.9830877780914307,
+      "active_concepts": [
+        145,
+        35,
+        54,
+        151,
+        289,
+        244,
+        218,
+        10
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0103_504.jpg"
+    },
+    {
+      "num_active": 2,
+      "mean_fg_ratio": 0.0140630342066288,
+      "active_mean_fg_ratio": 0.026370957493782043,
+      "active_mean_peak": 0.6299282312393188,
+      "active_mean_similarity": 0.9953409433364868,
+      "active_max_similarity": 0.9953409433364868,
+      "active_concepts": [
+        54,
+        145
+      ],
+      "image": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011/images/002.Laysan_Albatross/Laysan_Albatross_0104_630.jpg"
+    }
+  ]
+}

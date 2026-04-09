@@ -83,8 +83,16 @@ def save_triplet_panel(
 
         p_lo_before, p_hi_before = np.percentile(hm_before, [2, 98])
         p_lo_after, p_hi_after = np.percentile(hm_after, [2, 98])
-        before_norm = np.clip((hm_before - p_lo_before) / (p_hi_before - p_lo_before + 1e-8), 0.0, 1.0)
-        after_norm = np.clip((hm_after - p_lo_after) / (p_hi_after - p_lo_after + 1e-8), 0.0, 1.0)
+        spread_before = p_hi_before - p_lo_before
+        spread_after = p_hi_after - p_lo_after
+        before_norm = (
+            np.zeros_like(hm_before) if spread_before < 0.05
+            else np.clip((hm_before - p_lo_before) / (spread_before + 1e-8), 0.0, 1.0)
+        )
+        after_norm = (
+            np.zeros_like(hm_after) if spread_after < 0.05
+            else np.clip((hm_after - p_lo_after) / (spread_after + 1e-8), 0.0, 1.0)
+        )
         delta_scale = np.max(np.abs(hm_delta)) + 1e-8
 
         blended_before = overlay_rgb(img, before_norm, cmap_name=overlay_cmap, alpha=alpha)

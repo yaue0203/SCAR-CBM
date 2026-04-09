@@ -33,7 +33,12 @@ from pseudo_label_and_sampling import (
     PseudoLabelGenerator, UncertaintyGuidedSampler,
     CurriculumLearningScheduler
 )
-from loss_functions import MultiTaskLoss, SpatialConceptAlignmentLoss, SpatialForegroundSeparationLoss
+from loss_functions import (
+    MultiTaskLoss,
+    SpatialConceptAlignmentLoss,
+    SpatialConceptDiversityLoss,
+    SpatialForegroundSeparationLoss,
+)
 from stage1_hypergraph import build_concept_hypergraph as build_hypergraph_stage1
 
 
@@ -140,7 +145,8 @@ class ConceptualSSLFramework:
                  batch_size_unlabeled: int = 64,
                  learning_rate: float = 0.001,
                  lambda_spatial_align: float = 0.2,
-                 lambda_spatial_consistency: float = 0.15):
+                 lambda_spatial_consistency: float = 0.15,
+                 lambda_spatial_diversity: float = 0.3):
         """
         初始化框架
 
@@ -154,6 +160,7 @@ class ConceptualSSLFramework:
             learning_rate: 学习率
             lambda_spatial_align: 图像空间热力图与概念标签对齐损失权重（0 关闭）
             lambda_spatial_consistency: weak/strong 空间热力图一致性损失权重（0 关闭）
+            lambda_spatial_diversity: 不同概念空间热力图去同质化损失权重（0 关闭）
         """
         self.device = torch.device(device)
         self.model = model.to(self.device)
@@ -172,8 +179,10 @@ class ConceptualSSLFramework:
         self.loss_fn = MultiTaskLoss()
         self.lambda_spatial_align = float(lambda_spatial_align)
         self.lambda_spatial_consistency = float(lambda_spatial_consistency)
+        self.lambda_spatial_diversity = float(lambda_spatial_diversity)
         self.lambda_spatial_mask = 0.2
         self.spatial_align_loss = SpatialConceptAlignmentLoss()
+        self.spatial_diversity_loss = SpatialConceptDiversityLoss()
         self.spatial_mask_loss = SpatialForegroundSeparationLoss()
 
         # 学习率调度器
@@ -422,6 +431,10 @@ class ConceptualSSLFramework:
                     loss_spa = self.spatial_align_loss(smap, y_l)
                     loss_total = loss_total + self.lambda_spatial_align * loss_spa
                     epoch_losses["L_spatial_align"] += loss_spa.item()
+                    if self.lambda_spatial_diversity > 0.0:
+                        loss_div = self.spatial_diversity_loss(smap, y_l)
+                        loss_total = loss_total + self.lambda_spatial_diversity * loss_div
+                        epoch_losses["L_spatial_diversity"] += loss_div.item()
                     batch_mask_l = batch_l[4].to(self.device) if len(batch_l) > 4 else None
                     if batch_mask_l is not None and self.lambda_spatial_mask > 0.0:
                         loss_spatial_mask = self.spatial_mask_loss(smap, batch_mask_l, y_l)
@@ -507,6 +520,17 @@ class ConceptualSSLFramework:
             loss = losses_dict['L_total']
             if self.lambda_spatial_consistency > 0.0:
                 loss = loss + self.lambda_spatial_consistency * losses_dict['L_spatial_consistency']
+
+            if self.lambda_spatial_diversity > 0.0:
+                smap_w = outputs_weak.get('spatial_concept_heatmap')
+                if smap_w is not None:
+                    loss_div_u = self.spatial_diversity_loss(smap_w, c_pseudo.detach())
+                    loss = loss + self.lambda_spatial_diversity * loss_div_u
+                    losses_dict['L_spatial_diversity'] = loss_div_u
+                else:
+                    losses_dict['L_spatial_diversity'] = c_heatmap.new_zeros(())
+            else:
+                losses_dict['L_spatial_diversity'] = c_heatmap.new_zeros(())
 
             if batch_contour_mask is not None and self.lambda_spatial_mask > 0.0:
                 smap_w = outputs_weak.get('spatial_concept_heatmap')

@@ -334,6 +334,11 @@ def main() -> None:
         default=None,
         help="可选：与 Stage2 相同的 checkpoint（.pt）；若路径不存在则警告并随机初始化",
     )
+    parser.add_argument(
+        "--disable-contour-mask",
+        action="store_true",
+        help="禁用 CUB segmentation/contour mask：不加载 mask，不向 dataset 提供 contour_masks，等价于 contour_mask=None 训练",
+    )
     parser.add_argument("--num-concepts", type=int, default=312)
     parser.add_argument("--feature-dim", type=int, default=256)
     parser.add_argument("--num-heads", type=int, default=4)
@@ -341,6 +346,12 @@ def main() -> None:
     parser.add_argument("--batch-size-labeled", type=int, default=32)
     parser.add_argument("--batch-size-unlabeled", type=int, default=32)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
+    parser.add_argument(
+        "--lambda-spatial-diversity",
+        type=float,
+        default=0.3,
+        help="不同概念空间热力图去同质化损失权重；建议先从 0.1~0.3 试起",
+    )
     parser.add_argument("--image-size", type=int, default=224)
     parser.add_argument(
         "--val-split",
@@ -443,17 +454,22 @@ def run_stage5_cub_training(args) -> None:
     X_lab = images[lab_idx]
     y_lab = gt[lab_idx]
     X_unl = images[unl_idx]
-    contour_masks_all = load_cub_segmentations(
-        args.cub_root,
-        split="train",
-        image_size=args.image_size,
-        max_samples=0,
-    )
-    if contour_masks_all.shape[0] != n_img:
-        raise ValueError(
-            f"CUB contour mask 数 {contour_masks_all.shape[0]} 与图像数 {n_img} 不一致。"
+
+    contour_masks_unl: Optional[np.ndarray] = None
+    if getattr(args, "disable_contour_mask", False):
+        print("已禁用 contour mask：跳过 CUB segmentation 加载，按 contour_mask=None 训练。")
+    else:
+        contour_masks_all = load_cub_segmentations(
+            args.cub_root,
+            split="train",
+            image_size=args.image_size,
+            max_samples=0,
         )
-    contour_masks_unl = contour_masks_all[unl_idx]
+        if contour_masks_all.shape[0] != n_img:
+            raise ValueError(
+                f"CUB contour mask 数 {contour_masks_all.shape[0]} 与图像数 {n_img} 不一致。"
+            )
+        contour_masks_unl = contour_masks_all[unl_idx]
 
     n_lab = X_lab.shape[0]
     if n_lab < 2:
@@ -529,6 +545,7 @@ def run_stage5_cub_training(args) -> None:
         batch_size_labeled=args.batch_size_labeled,
         batch_size_unlabeled=args.batch_size_unlabeled,
         learning_rate=args.learning_rate,
+        lambda_spatial_diversity=getattr(args, "lambda_spatial_diversity", 0.3),
     )
 
     adj_path = resolve_adj_path(args.adj_path, args.stage1_out)
@@ -565,6 +582,7 @@ def run_stage5_cub_training(args) -> None:
                 "stage3_npz": os.path.abspath(args.stage3_npz),
                 "stage4_npz": os.path.abspath(args.stage4_npz) if args.stage4_npz else None,
                 "use_stage4_pool": bool(args.use_stage4_pool),
+                "disable_contour_mask": bool(getattr(args, "disable_contour_mask", False)),
                 "num_labeled_train": int(X_ltr.shape[0]),
                 "num_val": int(X_lv.shape[0]),
                 "num_unlabeled": int(X_unl.shape[0]),

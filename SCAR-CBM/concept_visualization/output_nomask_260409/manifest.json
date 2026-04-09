@@ -1,0 +1,651 @@
+{
+  "meta": {
+    "cub_root": "/root/autodl-tmp/SCAR-CBM/Data/CUB_200_2011",
+    "stage1_out": "/root/autodl-tmp/SCAR-CBM/Stage1/stage1_cub_output_rerun_260409",
+    "stage2_npz": "/root/autodl-tmp/SCAR-CBM/Stage2_Semantic-feature-extraction/stage2_output_rerun_260409/stage2_features.npz",
+    "stage4_npz": "/root/autodl-tmp/SCAR-CBM/Stage4_Anti-curriculum/stage4_output_rerun_260409/stage4_sampled_indices.npz",
+    "stage5_weights": "/root/autodl-tmp/SCAR-CBM/Stage5_Graph-logic_Optimization/stage5_output_nomask_260409/model_final.pt",
+    "sample_count": 8,
+    "top_k": 6,
+    "image_size": 224
+  },
+  "summary": {
+    "top_stage2": [
+      {
+        "concept_id": 65,
+        "concept_name": "65: has_back_color::olive",
+        "count": 8
+      },
+      {
+        "concept_id": 93,
+        "concept_name": "93: has_upper_tail_color::buff",
+        "count": 8
+      },
+      {
+        "concept_id": 152,
+        "concept_name": "152: has_forehead_color::blue",
+        "count": 8
+      },
+      {
+        "concept_id": 22,
+        "concept_name": "22: has_wing_color::red",
+        "count": 8
+      },
+      {
+        "concept_id": 101,
+        "concept_name": "101: has_head_pattern::plain",
+        "count": 8
+      },
+      {
+        "concept_id": 298,
+        "concept_name": "298: has_crown_color::grey",
+        "count": 5
+      },
+      {
+        "concept_id": 269,
+        "concept_name": "269: has_leg_color::yellow",
+        "count": 3
+      }
+    ],
+    "top_stage5": [
+      {
+        "concept_id": 145,
+        "concept_name": "145: has_eye_color::black",
+        "count": 8
+      },
+      {
+        "concept_id": 54,
+        "concept_name": "54: has_breast_pattern::solid",
+        "count": 8
+      },
+      {
+        "concept_id": 218,
+        "concept_name": "218: has_size::small_(5_-_9_in)",
+        "count": 6
+      },
+      {
+        "concept_id": 244,
+        "concept_name": "244: has_belly_pattern::solid",
+        "count": 6
+      },
+      {
+        "concept_id": 151,
+        "concept_name": "151: has_bill_length::shorter_than_head",
+        "count": 5
+      },
+      {
+        "concept_id": 235,
+        "concept_name": "235: has_shape::perching-like",
+        "count": 4
+      },
+      {
+        "concept_id": 259,
+        "concept_name": "259: has_primary_color::black",
+        "count": 3
+      },
+      {
+        "concept_id": 163,
+        "concept_name": "163: has_forehead_color::black",
+        "count": 3
+      },
+      {
+        "concept_id": 35,
+        "concept_name": "35: has_upperparts_color::black",
+        "count": 3
+      },
+      {
+        "concept_id": 131,
+        "concept_name": "131: has_throat_color::black",
+        "count": 2
+      }
+    ],
+    "top_stage2_chart": "summary/top_stage2_concepts.png",
+    "top_stage5_chart": "summary/top_stage5_concepts.png"
+  },
+  "samples": [
+    {
+      "row_index": 5792,
+      "image_id": 11390,
+      "relpath": "194.Cactus_Wren/Cactus_Wren_0041_185691.jpg",
+      "concept_ids": [
+        26,
+        145,
+        256,
+        299,
+        81,
+        32
+      ],
+      "concept_labels": [
+        "26: has_upperparts_color::iridescent",
+        "145: has_eye_color::black",
+        "256: has_primary_color::green",
+        "299: has_crown_color::yellow",
+        "81: has_upper_tail_color::iridescent",
+        "32: has_upperparts_color::green"
+      ],
+      "stage2_overlay": "samples/01_row_5792_stage2_overlay.png",
+      "stage5_overlay": "samples/01_row_5792_stage5_overlay.png",
+      "compare_panel": "samples/01_row_5792_compare.png",
+      "compare_stats": [
+        {
+          "concept_id": 26,
+          "concept_name": "26: has_upperparts_color::iridescent",
+          "stage2_max": 0.9076219797134399,
+          "stage5_max": 0.042901452630758286,
+          "delta_abs_max": 0.8694875240325928
+        },
+        {
+          "concept_id": 145,
+          "concept_name": "145: has_eye_color::black",
+          "stage2_max": 0.545904815196991,
+          "stage5_max": 0.881600022315979,
+          "delta_abs_max": 0.5272699594497681
+        },
+        {
+          "concept_id": 256,
+          "concept_name": "256: has_primary_color::green",
+          "stage2_max": 0.8772947192192078,
+          "stage5_max": 0.01715167425572872,
+          "delta_abs_max": 0.8625974059104919
+        },
+        {
+          "concept_id": 299,
+          "concept_name": "299: has_crown_color::yellow",
+          "stage2_max": 0.8718318343162537,
+          "stage5_max": 0.06036968529224396,
+          "delta_abs_max": 0.8466535806655884
+        },
+        {
+          "concept_id": 81,
+          "concept_name": "81: has_upper_tail_color::iridescent",
+          "stage2_max": 0.8683022260665894,
+          "stage5_max": 0.013744888827204704,
+          "delta_abs_max": 0.8562215566635132
+        },
+        {
+          "concept_id": 32,
+          "concept_name": "32: has_upperparts_color::green",
+          "stage2_max": 0.8577053546905518,
+          "stage5_max": 0.033854249864816666,
+          "delta_abs_max": 0.8462252020835876
+        }
+      ]
+    },
+    {
+      "row_index": 3961,
+      "image_id": 7755,
+      "relpath": "133.White_throated_Sparrow/White_Throated_Sparrow_0118_129084.jpg",
+      "concept_ids": [
+        26,
+        145,
+        256,
+        299,
+        32,
+        81
+      ],
+      "concept_labels": [
+        "26: has_upperparts_color::iridescent",
+        "145: has_eye_color::black",
+        "256: has_primary_color::green",
+        "299: has_crown_color::yellow",
+        "32: has_upperparts_color::green",
+        "81: has_upper_tail_color::iridescent"
+      ],
+      "stage2_overlay": "samples/02_row_3961_stage2_overlay.png",
+      "stage5_overlay": "samples/02_row_3961_stage5_overlay.png",
+      "compare_panel": "samples/02_row_3961_compare.png",
+      "compare_stats": [
+        {
+          "concept_id": 26,
+          "concept_name": "26: has_upperparts_color::iridescent",
+          "stage2_max": 0.8847172856330872,
+          "stage5_max": 0.045297615230083466,
+          "delta_abs_max": 0.8415316343307495
+        },
+        {
+          "concept_id": 145,
+          "concept_name": "145: has_eye_color::black",
+          "stage2_max": 0.5412006378173828,
+          "stage5_max": 0.88103848695755,
+          "delta_abs_max": 0.5314859747886658
+        },
+        {
+          "concept_id": 256,
+          "concept_name": "256: has_primary_color::green",
+          "stage2_max": 0.8602858781814575,
+          "stage5_max": 0.01829056441783905,
+          "delta_abs_max": 0.8463367223739624
+        },
+        {
+          "concept_id": 299,
+          "concept_name": "299: has_crown_color::yellow",
+          "stage2_max": 0.8601685762405396,
+          "stage5_max": 0.06463858485221863,
+          "delta_abs_max": 0.8285604119300842
+        },
+        {
+          "concept_id": 32,
+          "concept_name": "32: has_upperparts_color::green",
+          "stage2_max": 0.8558297753334045,
+          "stage5_max": 0.035805027931928635,
+          "delta_abs_max": 0.8444046378135681
+        },
+        {
+          "concept_id": 81,
+          "concept_name": "81: has_upper_tail_color::iridescent",
+          "stage2_max": 0.8522613048553467,
+          "stage5_max": 0.013682711869478226,
+          "delta_abs_max": 0.8405389785766602
+        }
+      ]
+    },
+    {
+      "row_index": 3898,
+      "image_id": 7627,
+      "relpath": "131.Vesper_Sparrow/Vesper_Sparrow_0005_125440.jpg",
+      "concept_ids": [
+        26,
+        145,
+        81,
+        123,
+        256,
+        299
+      ],
+      "concept_labels": [
+        "26: has_upperparts_color::iridescent",
+        "145: has_eye_color::black",
+        "81: has_upper_tail_color::iridescent",
+        "123: has_throat_color::purple",
+        "256: has_primary_color::green",
+        "299: has_crown_color::yellow"
+      ],
+      "stage2_overlay": "samples/03_row_3898_stage2_overlay.png",
+      "stage5_overlay": "samples/03_row_3898_stage5_overlay.png",
+      "compare_panel": "samples/03_row_3898_compare.png",
+      "compare_stats": [
+        {
+          "concept_id": 26,
+          "concept_name": "26: has_upperparts_color::iridescent",
+          "stage2_max": 0.912574827671051,
+          "stage5_max": 0.043989360332489014,
+          "delta_abs_max": 0.8699200749397278
+        },
+        {
+          "concept_id": 145,
+          "concept_name": "145: has_eye_color::black",
+          "stage2_max": 0.5672110915184021,
+          "stage5_max": 0.8784399032592773,
+          "delta_abs_max": 0.5208951234817505
+        },
+        {
+          "concept_id": 81,
+          "concept_name": "81: has_upper_tail_color::iridescent",
+          "stage2_max": 0.8641861081123352,
+          "stage5_max": 0.013680998235940933,
+          "delta_abs_max": 0.8535751700401306
+        },
+        {
+          "concept_id": 123,
+          "concept_name": "123: has_throat_color::purple",
+          "stage2_max": 0.8618308305740356,
+          "stage5_max": 0.007388419937342405,
+          "delta_abs_max": 0.8570082187652588
+        },
+        {
+          "concept_id": 256,
+          "concept_name": "256: has_primary_color::green",
+          "stage2_max": 0.8600744009017944,
+          "stage5_max": 0.018346590921282768,
+          "delta_abs_max": 0.8479990363121033
+        },
+        {
+          "concept_id": 299,
+          "concept_name": "299: has_crown_color::yellow",
+          "stage2_max": 0.8436047434806824,
+          "stage5_max": 0.06270816922187805,
+          "delta_abs_max": 0.817284882068634
+        }
+      ]
+    },
+    {
+      "row_index": 2132,
+      "image_id": 4143,
+      "relpath": "072.Pomarine_Jaeger/Pomarine_Jaeger_0026_61273.jpg",
+      "concept_ids": [
+        145,
+        299,
+        26,
+        140,
+        85,
+        256
+      ],
+      "concept_labels": [
+        "145: has_eye_color::black",
+        "299: has_crown_color::yellow",
+        "26: has_upperparts_color::iridescent",
+        "140: has_eye_color::yellow",
+        "85: has_upper_tail_color::yellow",
+        "256: has_primary_color::green"
+      ],
+      "stage2_overlay": "samples/04_row_2132_stage2_overlay.png",
+      "stage5_overlay": "samples/04_row_2132_stage5_overlay.png",
+      "compare_panel": "samples/04_row_2132_compare.png",
+      "compare_stats": [
+        {
+          "concept_id": 145,
+          "concept_name": "145: has_eye_color::black",
+          "stage2_max": 0.5760018229484558,
+          "stage5_max": 0.8889699578285217,
+          "delta_abs_max": 0.5118119716644287
+        },
+        {
+          "concept_id": 299,
+          "concept_name": "299: has_crown_color::yellow",
+          "stage2_max": 0.8710689544677734,
+          "stage5_max": 0.06981087476015091,
+          "delta_abs_max": 0.8376578092575073
+        },
+        {
+          "concept_id": 26,
+          "concept_name": "26: has_upperparts_color::iridescent",
+          "stage2_max": 0.8720918893814087,
+          "stage5_max": 0.047069352120161057,
+          "delta_abs_max": 0.8493448495864868
+        },
+        {
+          "concept_id": 140,
+          "concept_name": "140: has_eye_color::yellow",
+          "stage2_max": 0.8619605302810669,
+          "stage5_max": 0.01961161009967327,
+          "delta_abs_max": 0.8473021984100342
+        },
+        {
+          "concept_id": 85,
+          "concept_name": "85: has_upper_tail_color::yellow",
+          "stage2_max": 0.8584151864051819,
+          "stage5_max": 0.053706686943769455,
+          "delta_abs_max": 0.8438982367515564
+        },
+        {
+          "concept_id": 256,
+          "concept_name": "256: has_primary_color::green",
+          "stage2_max": 0.8580201268196106,
+          "stage5_max": 0.023742450401186943,
+          "delta_abs_max": 0.8493109941482544
+        }
+      ]
+    },
+    {
+      "row_index": 840,
+      "image_id": 1582,
+      "relpath": "029.American_Crow/American_Crow_0117_25090.jpg",
+      "concept_ids": [
+        26,
+        299,
+        145,
+        81,
+        123,
+        256
+      ],
+      "concept_labels": [
+        "26: has_upperparts_color::iridescent",
+        "299: has_crown_color::yellow",
+        "145: has_eye_color::black",
+        "81: has_upper_tail_color::iridescent",
+        "123: has_throat_color::purple",
+        "256: has_primary_color::green"
+      ],
+      "stage2_overlay": "samples/05_row_0840_stage2_overlay.png",
+      "stage5_overlay": "samples/05_row_0840_stage5_overlay.png",
+      "compare_panel": "samples/05_row_0840_compare.png",
+      "compare_stats": [
+        {
+          "concept_id": 26,
+          "concept_name": "26: has_upperparts_color::iridescent",
+          "stage2_max": 0.9043068289756775,
+          "stage5_max": 0.04205619916319847,
+          "delta_abs_max": 0.8622506260871887
+        },
+        {
+          "concept_id": 299,
+          "concept_name": "299: has_crown_color::yellow",
+          "stage2_max": 0.8763662576675415,
+          "stage5_max": 0.07061119377613068,
+          "delta_abs_max": 0.8433431386947632
+        },
+        {
+          "concept_id": 145,
+          "concept_name": "145: has_eye_color::black",
+          "stage2_max": 0.5857054591178894,
+          "stage5_max": 0.872503399848938,
+          "delta_abs_max": 0.5394365191459656
+        },
+        {
+          "concept_id": 81,
+          "concept_name": "81: has_upper_tail_color::iridescent",
+          "stage2_max": 0.869189977645874,
+          "stage5_max": 0.013472861610352993,
+          "delta_abs_max": 0.8587242960929871
+        },
+        {
+          "concept_id": 123,
+          "concept_name": "123: has_throat_color::purple",
+          "stage2_max": 0.863700807094574,
+          "stage5_max": 0.008141769096255302,
+          "delta_abs_max": 0.8571227788925171
+        },
+        {
+          "concept_id": 256,
+          "concept_name": "256: has_primary_color::green",
+          "stage2_max": 0.8605788946151733,
+          "stage5_max": 0.02226736769080162,
+          "delta_abs_max": 0.8469375371932983
+        }
+      ]
+    },
+    {
+      "row_index": 308,
+      "image_id": 559,
+      "relpath": "011.Rusty_Blackbird/Rusty_Blackbird_0076_6716.jpg",
+      "concept_ids": [
+        299,
+        145,
+        26,
+        123,
+        32,
+        81
+      ],
+      "concept_labels": [
+        "299: has_crown_color::yellow",
+        "145: has_eye_color::black",
+        "26: has_upperparts_color::iridescent",
+        "123: has_throat_color::purple",
+        "32: has_upperparts_color::green",
+        "81: has_upper_tail_color::iridescent"
+      ],
+      "stage2_overlay": "samples/06_row_0308_stage2_overlay.png",
+      "stage5_overlay": "samples/06_row_0308_stage5_overlay.png",
+      "compare_panel": "samples/06_row_0308_compare.png",
+      "compare_stats": [
+        {
+          "concept_id": 299,
+          "concept_name": "299: has_crown_color::yellow",
+          "stage2_max": 0.8821380734443665,
+          "stage5_max": 0.07079139351844788,
+          "delta_abs_max": 0.8511353135108948
+        },
+        {
+          "concept_id": 145,
+          "concept_name": "145: has_eye_color::black",
+          "stage2_max": 0.6160545349121094,
+          "stage5_max": 0.881190836429596,
+          "delta_abs_max": 0.5218004584312439
+        },
+        {
+          "concept_id": 26,
+          "concept_name": "26: has_upperparts_color::iridescent",
+          "stage2_max": 0.8806968331336975,
+          "stage5_max": 0.047931645065546036,
+          "delta_abs_max": 0.8370566964149475
+        },
+        {
+          "concept_id": 123,
+          "concept_name": "123: has_throat_color::purple",
+          "stage2_max": 0.853821337223053,
+          "stage5_max": 0.007739781402051449,
+          "delta_abs_max": 0.8484262228012085
+        },
+        {
+          "concept_id": 32,
+          "concept_name": "32: has_upperparts_color::green",
+          "stage2_max": 0.855046808719635,
+          "stage5_max": 0.036214862018823624,
+          "delta_abs_max": 0.8433752059936523
+        },
+        {
+          "concept_id": 81,
+          "concept_name": "81: has_upper_tail_color::iridescent",
+          "stage2_max": 0.8543145656585693,
+          "stage5_max": 0.013655775226652622,
+          "delta_abs_max": 0.8424623012542725
+        }
+      ]
+    },
+    {
+      "row_index": 5193,
+      "image_id": 10202,
+      "relpath": "174.Palm_Warbler/Palm_Warbler_0133_169575.jpg",
+      "concept_ids": [
+        26,
+        145,
+        123,
+        299,
+        256,
+        85
+      ],
+      "concept_labels": [
+        "26: has_upperparts_color::iridescent",
+        "145: has_eye_color::black",
+        "123: has_throat_color::purple",
+        "299: has_crown_color::yellow",
+        "256: has_primary_color::green",
+        "85: has_upper_tail_color::yellow"
+      ],
+      "stage2_overlay": "samples/07_row_5193_stage2_overlay.png",
+      "stage5_overlay": "samples/07_row_5193_stage5_overlay.png",
+      "compare_panel": "samples/07_row_5193_compare.png",
+      "compare_stats": [
+        {
+          "concept_id": 26,
+          "concept_name": "26: has_upperparts_color::iridescent",
+          "stage2_max": 0.883478045463562,
+          "stage5_max": 0.045643072575330734,
+          "delta_abs_max": 0.8428361415863037
+        },
+        {
+          "concept_id": 145,
+          "concept_name": "145: has_eye_color::black",
+          "stage2_max": 0.5760630369186401,
+          "stage5_max": 0.874592125415802,
+          "delta_abs_max": 0.5239518880844116
+        },
+        {
+          "concept_id": 123,
+          "concept_name": "123: has_throat_color::purple",
+          "stage2_max": 0.863917887210846,
+          "stage5_max": 0.007069205399602652,
+          "delta_abs_max": 0.8572965860366821
+        },
+        {
+          "concept_id": 299,
+          "concept_name": "299: has_crown_color::yellow",
+          "stage2_max": 0.8631671667098999,
+          "stage5_max": 0.06205588951706886,
+          "delta_abs_max": 0.8384191393852234
+        },
+        {
+          "concept_id": 256,
+          "concept_name": "256: has_primary_color::green",
+          "stage2_max": 0.8607494235038757,
+          "stage5_max": 0.017762145027518272,
+          "delta_abs_max": 0.8475067019462585
+        },
+        {
+          "concept_id": 85,
+          "concept_name": "85: has_upper_tail_color::yellow",
+          "stage2_max": 0.8558863997459412,
+          "stage5_max": 0.04702958092093468,
+          "delta_abs_max": 0.8320137858390808
+        }
+      ]
+    },
+    {
+      "row_index": 4147,
+      "image_id": 8123,
+      "relpath": "139.Scarlet_Tanager/Scarlet_Tanager_0040_137885.jpg",
+      "concept_ids": [
+        26,
+        299,
+        145,
+        123,
+        81,
+        85
+      ],
+      "concept_labels": [
+        "26: has_upperparts_color::iridescent",
+        "299: has_crown_color::yellow",
+        "145: has_eye_color::black",
+        "123: has_throat_color::purple",
+        "81: has_upper_tail_color::iridescent",
+        "85: has_upper_tail_color::yellow"
+      ],
+      "stage2_overlay": "samples/08_row_4147_stage2_overlay.png",
+      "stage5_overlay": "samples/08_row_4147_stage5_overlay.png",
+      "compare_panel": "samples/08_row_4147_compare.png",
+      "compare_stats": [
+        {
+          "concept_id": 26,
+          "concept_name": "26: has_upperparts_color::iridescent",
+          "stage2_max": 0.9137939810752869,
+          "stage5_max": 0.04391462728381157,
+          "delta_abs_max": 0.8726336359977722
+        },
+        {
+          "concept_id": 299,
+          "concept_name": "299: has_crown_color::yellow",
+          "stage2_max": 0.8748388886451721,
+          "stage5_max": 0.06782867014408112,
+          "delta_abs_max": 0.8396265506744385
+        },
+        {
+          "concept_id": 145,
+          "concept_name": "145: has_eye_color::black",
+          "stage2_max": 0.5657399296760559,
+          "stage5_max": 0.8732783198356628,
+          "delta_abs_max": 0.5365958213806152
+        },
+        {
+          "concept_id": 123,
+          "concept_name": "123: has_throat_color::purple",
+          "stage2_max": 0.8598297238349915,
+          "stage5_max": 0.007408417295664549,
+          "delta_abs_max": 0.8551024794578552
+        },
+        {
+          "concept_id": 81,
+          "concept_name": "81: has_upper_tail_color::iridescent",
+          "stage2_max": 0.8614230155944824,
+          "stage5_max": 0.013582657091319561,
+          "delta_abs_max": 0.8508803844451904
+        },
+        {
+          "concept_id": 85,
+          "concept_name": "85: has_upper_tail_color::yellow",
+          "stage2_max": 0.8588700294494629,
+          "stage5_max": 0.05414052680134773,
+          "delta_abs_max": 0.8387608528137207
+        }
+      ]
+    }
+  ]
+}

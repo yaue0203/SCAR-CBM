@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SCAR-CBM Concept Visualization</title>
+  <style>
+    :root {
+      --bg: #f5f1e8;
+      --panel: #fffdf8;
+      --ink: #1c1c1c;
+      --muted: #645f57;
+      --line: #d8cfbf;
+      --accent: #0d6c66;
+    }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Noto Sans SC", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(13,108,102,0.10), transparent 28%),
+        radial-gradient(circle at top right, rgba(193,124,49,0.14), transparent 30%),
+        var(--bg);
+    }
+    main {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 32px 24px 80px;
+    }
+    h1, h2, h3 { margin: 0 0 12px; }
+    p { margin: 0 0 12px; line-height: 1.5; }
+    .hero, .section, .sample-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 10px 30px rgba(28,28,28,0.06);
+    }
+    .hero { padding: 24px; }
+    .section { margin-top: 18px; padding: 20px; }
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px 18px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+    .grid.two { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .grid.three { grid-template-columns: 1fr; }
+    .sample-card { margin-top: 18px; padding: 18px; }
+    .concepts {
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+    figure {
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      background: #fff;
+    }
+    img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    figcaption {
+      padding: 10px 12px;
+      font-size: 14px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+    }
+    ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+    li { margin: 0 0 8px; }
+    @media (min-width: 980px) {
+      .grid.three { grid-template-columns: repeat(3, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>SCAR-CBM Concept Visualization Panel</h1>
+      <p>这个面板展示了 Stage2 空间概念热图、Stage5 最终权重热图，以及它们在同一批样本上的差异。</p>
+      <div class="meta">
+        <div><strong>Stage2 NPZ</strong><br>/root/autodl-tmp/SCAR-CBM/Stage2_Semantic-feature-extraction/stage2_output_rerun_260409/stage2_features.npz</div>
+        <div><strong>Stage5 Weights</strong><br>/root/autodl-tmp/SCAR-CBM/Stage5_Graph-logic_Optimization/stage5_output_nomask_260409/model_final.pt</div>
+        <div><strong>Sample Count</strong><br>8</div>
+        <div><strong>Top-K Concepts</strong><br>6</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Summary</h2>
+      <div class="grid two">
+        <figure><img src="summary/top_stage2_concepts.png" alt="top stage2 concepts" loading="lazy"><figcaption>Stage2 Top Concepts</figcaption></figure>
+        <figure><img src="summary/top_stage5_concepts.png" alt="top stage5 concepts" loading="lazy"><figcaption>Stage5 Top Concepts</figcaption></figure>
+      </div>
+      <div class="grid two" style="margin-top:16px">
+        <div>
+          <h3>Stage2 Frequent Concepts</h3>
+          <ol>
+            <li>65: has_back_color::olive (8)</li><li>93: has_upper_tail_color::buff (8)</li><li>152: has_forehead_color::blue (8)</li><li>22: has_wing_color::red (8)</li><li>101: has_head_pattern::plain (8)</li><li>298: has_crown_color::grey (5)</li><li>269: has_leg_color::yellow (3)</li>
+          </ol>
+        </div>
+        <div>
+          <h3>Stage5 Frequent Concepts</h3>
+          <ol>
+            <li>145: has_eye_color::black (8)</li><li>54: has_breast_pattern::solid (8)</li><li>218: has_size::small_(5_-_9_in) (6)</li><li>244: has_belly_pattern::solid (6)</li><li>151: has_bill_length::shorter_than_head (5)</li><li>235: has_shape::perching-like (4)</li><li>259: has_primary_color::black (3)</li><li>163: has_forehead_color::black (3)</li><li>35: has_upperparts_color::black (3)</li><li>131: has_throat_color::black (2)</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Samples</h2>
+      
+            <section class="sample-card">
+              <h3>row 5792 | 194.Cactus_Wren/Cactus_Wren_0041_185691.jpg</h3>
+              <p class="concepts">26: has_upperparts_color::iridescent, 145: has_eye_color::black, 256: has_primary_color::green, 299: has_crown_color::yellow, 81: has_upper_tail_color::iridescent, 32: has_upperparts_color::green</p>
+              <div class="grid three">
+                <figure><img src="samples/01_row_5792_stage2_overlay.png" alt="stage2 overlay" loading="lazy"><figcaption>Stage2 Overlay</figcaption></figure>
+                <figure><img src="samples/01_row_5792_stage5_overlay.png" alt="stage5 overlay" loading="lazy"><figcaption>Stage5 Overlay</figcaption></figure>
+                <figure><img src="samples/01_row_5792_compare.png" alt="compare panel" loading="lazy"><figcaption>Stage2 vs Stage5 vs Delta</figcaption></figure>
+              </div>
+            </section>
+            
+            <section class="sample-card">
+              <h3>row 3961 | 133.White_throated_Sparrow/White_Throated_Sparrow_0118_129084.jpg</h3>
+              <p class="concepts">26: has_upperparts_color::iridescent, 145: has_eye_color::black, 256: has_primary_color::green, 299: has_crown_color::yellow, 32: has_upperparts_color::green, 81: has_upper_tail_color::iridescent</p>
+              <div class="grid three">
+                <figure><img src="samples/02_row_3961_stage2_overlay.png" alt="stage2 overlay" loading="lazy"><figcaption>Stage2 Overlay</figcaption></figure>
+                <figure><img src="samples/02_row_3961_stage5_overlay.png" alt="stage5 overlay" loading="lazy"><figcaption>Stage5 Overlay</figcaption></figure>
+                <figure><img src="samples/02_row_3961_compare.png" alt="compare panel" loading="lazy"><figcaption>Stage2 vs Stage5 vs Delta</figcaption></figure>
+              </div>
+            </section>
+            
+            <section class="sample-card">
+              <h3>row 3898 | 131.Vesper_Sparrow/Vesper_Sparrow_0005_125440.jpg</h3>
+              <p class="concepts">26: has_upperparts_color::iridescent, 145: has_eye_color::black, 81: has_upper_tail_color::iridescent, 123: has_throat_color::purple, 256: has_primary_color::green, 299: has_crown_color::yellow</p>
+              <div class="grid three">
+                <figure><img src="samples/03_row_3898_stage2_overlay.png" alt="stage2 overlay" loading="lazy"><figcaption>Stage2 Overlay</figcaption></figure>
+                <figure><img src="samples/03_row_3898_stage5_overlay.png" alt="stage5 overlay" loading="lazy"><figcaption>Stage5 Overlay</figcaption></figure>
+                <figure><img src="samples/03_row_3898_compare.png" alt="compare panel" loading="lazy"><figcaption>Stage2 vs Stage5 vs Delta</figcaption></figure>
+              </div>
+            </section>
+            
+            <section class="sample-card">
+              <h3>row 2132 | 072.Pomarine_Jaeger/Pomarine_Jaeger_0026_61273.jpg</h3>
+              <p class="concepts">145: has_eye_color::black, 299: has_crown_color::yellow, 26: has_upperparts_color::iridescent, 140: has_eye_color::yellow, 85: has_upper_tail_color::yellow, 256: has_primary_color::green</p>
+              <div class="grid three">
+                <figure><img src="samples/04_row_2132_stage2_overlay.png" alt="stage2 overlay" loading="lazy"><figcaption>Stage2 Overlay</figcaption></figure>
+                <figure><img src="samples/04_row_2132_stage5_overlay.png" alt="stage5 overlay" loading="lazy"><figcaption>Stage5 Overlay</figcaption></figure>
+                <figure><img src="samples/04_row_2132_compare.png" alt="compare panel" loading="lazy"><figcaption>Stage2 vs Stage5 vs Delta</figcaption></figure>
+              </div>
+            </section>
+            
+            <section class="sample-card">
+              <h3>row 840 | 029.American_Crow/American_Crow_0117_25090.jpg</h3>
+              <p class="concepts">26: has_upperparts_color::iridescent, 299: has_crown_color::yellow, 145: has_eye_color::black, 81: has_upper_tail_color::iridescent, 123: has_throat_color::purple, 256: has_primary_color::green</p>
+              <div class="grid three">
+                <figure><img src="samples/05_row_0840_stage2_overlay.png" alt="stage2 overlay" loading="lazy"><figcaption>Stage2 Overlay</figcaption></figure>
+                <figure><img src="samples/05_row_0840_stage5_overlay.png" alt="stage5 overlay" loading="lazy"><figcaption>Stage5 Overlay</figcaption></figure>
+                <figure><img src="samples/05_row_0840_compare.png" alt="compare panel" loading="lazy"><figcaption>Stage2 vs Stage5 vs Delta</figcaption></figure>
+              </div>
+            </section>
+            
+            <section class="sample-card">
+              <h3>row 308 | 011.Rusty_Blackbird/Rusty_Blackbird_0076_6716.jpg</h3>
+              <p class="concepts">299: has_crown_color::yellow, 145: has_eye_color::black, 26: has_upperparts_color::iridescent, 123: has_throat_color::purple, 32: has_upperparts_color::green, 81: has_upper_tail_color::iridescent</p>
+              <div class="grid three">
+                <figure><img src="samples/06_row_0308_stage2_overlay.png" alt="stage2 overlay" loading="lazy"><figcaption>Stage2 Overlay</figcaption></figure>
+                <figure><img src="samples/06_row_0308_stage5_overlay.png" alt="stage5 overlay" loading="lazy"><figcaption>Stage5 Overlay</figcaption></figure>
+                <figure><img src="samples/06_row_0308_compare.png" alt="compare panel" loading="lazy"><figcaption>Stage2 vs Stage5 vs Delta</figcaption></figure>
+              </div>
+            </section>
+            
+            <section class="sample-card">
+              <h3>row 5193 | 174.Palm_Warbler/Palm_Warbler_0133_169575.jpg</h3>
+              <p class="concepts">26: has_upperparts_color::iridescent, 145: has_eye_color::black, 123: has_throat_color::purple, 299: has_crown_color::yellow, 256: has_primary_color::green, 85: has_upper_tail_color::yellow</p>
+              <div class="grid three">
+                <figure><img src="samples/07_row_5193_stage2_overlay.png" alt="stage2 overlay" loading="lazy"><figcaption>Stage2 Overlay</figcaption></figure>
+                <figure><img src="samples/07_row_5193_stage5_overlay.png" alt="stage5 overlay" loading="lazy"><figcaption>Stage5 Overlay</figcaption></figure>
+                <figure><img src="samples/07_row_5193_compare.png" alt="compare panel" loading="lazy"><figcaption>Stage2 vs Stage5 vs Delta</figcaption></figure>
+              </div>
+            </section>
+            
+            <section class="sample-card">
+              <h3>row 4147 | 139.Scarlet_Tanager/Scarlet_Tanager_0040_137885.jpg</h3>
+              <p class="concepts">26: has_upperparts_color::iridescent, 299: has_crown_color::yellow, 145: has_eye_color::black, 123: has_throat_color::purple, 81: has_upper_tail_color::iridescent, 85: has_upper_tail_color::yellow</p>
+              <div class="grid three">
+                <figure><img src="samples/08_row_4147_stage2_overlay.png" alt="stage2 overlay" loading="lazy"><figcaption>Stage2 Overlay</figcaption></figure>
+                <figure><img src="samples/08_row_4147_stage5_overlay.png" alt="stage5 overlay" loading="lazy"><figcaption>Stage5 Overlay</figcaption></figure>
+                <figure><img src="samples/08_row_4147_compare.png" alt="compare panel" loading="lazy"><figcaption>Stage2 vs Stage5 vs Delta</figcaption></figure>
+              </div>
+            </section>
+            
+    </section>
+  </main>
+</body>
+</html>
